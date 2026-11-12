@@ -10,7 +10,9 @@ const { spawn, execFile } = require('child_process');
 const { pathToFileURL } = require('url');
 
 // ───────────────────────────────────────────── basics
-if (!app.requestSingleInstanceLock()) {
+const TEST_DIR = process.env.CLIPY_TEST_DIR; // self-test mode (dev only) – separate profile, may run beside a normal Clipy
+if (TEST_DIR) app.setPath('userData', path.join(TEST_DIR, 'userdata'));
+if (!TEST_DIR && !app.requestSingleInstanceLock()) {
   app.quit();
   process.exit(0);
 }
@@ -22,8 +24,6 @@ let FFMPEG = require('ffmpeg-static');
 if (FFMPEG) FFMPEG = FFMPEG.replace('app.asar', 'app.asar.unpacked');
 
 const SEG_SECONDS = 20; // length of one rolling buffer session
-const TEST_DIR = process.env.CLIPY_TEST_DIR; // self-test mode (dev only)
-if (TEST_DIR) app.setPath('userData', path.join(TEST_DIR, 'userdata'));
 const USER = app.getPath('userData');
 const SETTINGS_FILE = path.join(USER, 'settings.json');
 const LIB_FILE = path.join(USER, 'library.json');
@@ -452,6 +452,11 @@ const crypto = require('crypto');
 
 function afterNewItem(item) {
   enforceStorage().catch(() => {});
+  if (item.game) lastGame = { name: item.game, at: Date.now() };
+  if (cloud.configured() && cloud.session()) {
+    cloud.postActivity({ title: item.title, game: item.game, duration: item.duration, type: item.type }).catch(() => {});
+    cloudHeartbeat();
+  }
   if (settings.discordAutoPost && settings.discordWebhook) {
     discordSend(item.id, { auto: true })
       .then(() => toast({ kind: 'discord', title: 'Posted to Discord', sub: settings.discordInfo ? `#${settings.discordInfo.name}` : item.title }))
@@ -613,6 +618,7 @@ const BUNDLED = readJSON(path.join(ROOT, 'oauth.json'), {});
 // Built-in keys always win and cannot be overridden from the app.
 const cred = (key) => String(BUNDLED[key] || settings[key] || '').trim();
 const bundledHas = (k) => !!String(BUNDLED[k] || '').trim();
+const cloud = require('./cloud')({ userDir: USER, config: BUNDLED });
 
 // Opens the provider's sign-in page in the browser and waits for the redirect on a local port.
 async function loopbackAuth({ port = 0, pathName = '/', authUrl }) {
@@ -683,8 +689,16 @@ async function googleSignIn() {
   if (!settings.profileName) settings.profileName = info.given_name || info.name || '';
   if (!settings.avatar && picture) settings.avatar = picture;
   saveSettings();
+  // also sign in to Clipy Cloud (friends) with the same Google account
+  let cloudError = null;
+  if (cloud.configured() && tok.id_token) {
+    try {
+      await cloud.signInGoogle(tok.id_token);
+      await cloud.ensureProfile({ name: settings.profileName, photo: info.picture || '' });
+    } catch (e) { cloudError = e.message; }
+  }
   showMain();
-  return { ok: true };
+  return { ok: true, cloudError };
 }
 
 // ── Discord sign-in (OAuth 2.0, scope "identify"). Discord needs an exact redirect URI → fixed port.
@@ -804,8 +818,15 @@ function profileForUI() {
     discordLoginConfigured: !!(cred('discordClientId') && cred('discordClientSecret')),
     discordBundled: bundledHas('discordClientId'),
     discordRedirect: DISCORD_REDIRECT,
-    account: (() => { const a = currentAccount(); return a ? { email: a.email, name: a.name, created: a.created } : null; })(),
+    account: (() => {
+      if (cloud.configured()) {
+        const s = cloud.session();
+        return s && s.provider === 'password' ? { email: s.email, name: settings.profileName, created: s.created || Date.now(), online: true } : null;
+      }
+      const a = currentAccount(); return a ? { email: a.email, name: a.name, created: a.created } : null;
+    })(),
     accountsOnDevice: accounts.length,
+    cloud: { configured: cloud.configured(), signedIn: !!cloud.session(), provider: cloud.session() ? cloud.session().provider : null },
   };
 }
 ipcMain.handle('discord:login', async () => {
@@ -816,10 +837,60 @@ ipcMain.handle('discord:logout', () => {
   settings.discordUser = null; saveSettings(); return profileForUI();
 });
 ipcMain.handle('discord:loginhelp', () => shell.openExternal('https://discord.com/developers/applications'));
-ipcMain.handle('account:register', (_e, d) => accountRegister(d || {}));
-ipcMain.handle('account:login', (_e, d) => accountLogin(d || {}));
-ipcMain.handle('account:logout', () => { settings.accountId = null; saveSettings(); return profileForUI(); });
-ipcMain.handle('account:password', (_e, d) => accountChangePassword(d || {}));
+// With Clipy Cloud set up, email accounts are real online accounts (Firebase Auth); otherwise local.
+async function cloudAuth(fn, d) {
+  const email = String(d.email || '').trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) return { ok: false, error: 'Enter a valid email address' };
+  if (fn === 'up') { const bad = checkPassword(d.password); if (bad) return { ok: false, error: bad }; }
+  try {
+    if (fn === 'up') await cloud.signUpEmail(email, d.password); else await cloud.signInEmail(email, d.password);
+    if (d.name && !settings.profileName) { settings.profileName = String(d.name).trim().slice(0, 32); saveSettings(); }
+    await cloud.ensureProfile({ name: settings.profileName || d.name });
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+ipcMain.handle('account:register', (_e, d) => (cloud.configured() ? cloudAuth('up', d || {}) : accountRegister(d || {})));
+ipcMain.handle('account:login', (_e, d) => (cloud.configured() ? cloudAuth('in', d || {}) : accountLogin(d || {})));
+ipcMain.handle('account:logout', () => {
+  settings.accountId = null; saveSettings();
+  const s = cloud.session(); if (s && s.provider === 'password') cloud.signOut();
+  return profileForUI();
+});
+ipcMain.handle('account:password', async (_e, d) => {
+  if (!cloud.configured()) return accountChangePassword(d || {});
+  const s = cloud.session();
+  if (!s || s.provider !== 'password') return { ok: false, error: 'Not signed in with email' };
+  const bad = checkPassword(d.next); if (bad) return { ok: false, error: bad };
+  try { await cloud.signInEmail(s.email, d.current); } catch { return { ok: false, error: 'Current password is wrong' }; }
+  try { await cloud.changePassword(d.next); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('account:reset', async (_e, email) => {
+  if (!cloud.configured()) return { ok: false, error: 'Password reset needs Clipy Cloud' };
+  try { await cloud.resetPassword(String(email || '').trim()); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; }
+});
+
+// ── friends (Clipy Cloud)
+const friendsErr = (e) => ({ ok: false, error: /permission denied/i.test(e.message) ? 'Not allowed – maybe a request is already pending' : e.message });
+ipcMain.handle('friends:overview', async () => {
+  if (!cloud.configured()) return { ok: false, reason: 'not-configured' };
+  if (!cloud.session()) return { ok: false, reason: 'signed-out' };
+  try {
+    const me = await cloud.ensureProfile({ name: settings.profileName });
+    const o = await cloud.overview();
+    return { ok: true, me, ...o, now: Date.now() };
+  } catch (e) { return { ok: false, reason: 'error', error: e.message }; }
+});
+ipcMain.handle('friends:add', async (_e, code) => { try { return { ok: true, ...(await cloud.sendRequest(code, settings.profileName)) }; } catch (e) { return friendsErr(e); } });
+ipcMain.handle('friends:accept', async (_e, req) => { try { await cloud.accept(req); return { ok: true }; } catch (e) { return friendsErr(e); } });
+ipcMain.handle('friends:decline', async (_e, req) => { try { await cloud.decline(req); return { ok: true }; } catch (e) { return friendsErr(e); } });
+ipcMain.handle('friends:remove', async (_e, uid) => { try { await cloud.removeFriend(uid); return { ok: true }; } catch (e) { return friendsErr(e); } });
+
+let lastGame = { name: '', at: 0 };
+function cloudHeartbeat() {
+  if (!cloud.configured() || !cloud.session()) return;
+  const game = Date.now() - lastGame.at < 20 * 60 * 1000 ? lastGame.name : '';
+  cloud.heartbeat({ name: settings.profileName, game, clipping: settings.bufferEnabled && rec.ready }).catch(() => {});
+}
 
 ipcMain.handle('profile', () => profileForUI());
 ipcMain.handle('avatar:choose', async () => {
@@ -842,7 +913,10 @@ ipcMain.handle('google:signin', async () => {
 });
 ipcMain.handle('google:signout', () => {
   if (settings.google && settings.avatar === settings.google.picture) settings.avatar = null;
-  settings.google = null; saveSettings(); return profileForUI();
+  settings.google = null; saveSettings();
+  const s = cloud.session();
+  if (s && s.provider === 'google') cloud.signOut();
+  return profileForUI();
 });
 ipcMain.handle('google:help', () => shell.openExternal('https://console.cloud.google.com/apis/credentials'));
 ipcMain.handle('discord:connect', (_e, url) => discordConnect(url));
@@ -1091,6 +1165,8 @@ app.whenReady().then(async () => {
   pushState();
   checkUpdate();
   setInterval(checkUpdate, 6 * 60 * 60 * 1000);
+  cloudHeartbeat();
+  setInterval(cloudHeartbeat, 60 * 1000);
 
   if (TEST_DIR) runSelfTest();
 });
@@ -1149,6 +1225,22 @@ async function runSelfTest() {
   log('acc-newpw', JSON.stringify(await accountLogin({ email: 'test@example.com', password: 'better5678' })));
   log('acc-stored', JSON.stringify(Object.keys(accounts[0])), 'plaintext-in-file:', fs.readFileSync(ACCOUNTS_FILE, 'utf8').includes('better5678'));
   log('discord-login-unconfigured', JSON.stringify(await discordLogin()));
+  if (cloud.configured()) {
+    settings.accountId = null;
+    const tmpEmail = `clipy-ui-${Date.now().toString(36)}@example.com`;
+    log('cloud-signup', JSON.stringify(await cloudAuth('up', { email: tmpEmail, password: 'Uitest12345', name: 'Tester' })));
+    await cloud.postActivity({ title: 'Test clip', game: 'Clipy', duration: 12, type: 'clip' }).catch(() => {});
+    js(`go('friends')`);
+    await new Promise((r) => setTimeout(r, 6000));
+    await shot('06-friends.png');
+    try {
+      const s = cloud.session();
+      await fetch(`https://firestore.googleapis.com/v1/projects/${BUNDLED.firebaseProjectId}/databases/(default)/documents/users/${s.uid}`, { method: 'DELETE', headers: { Authorization: `Bearer ${s.idToken}` } });
+      await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:delete?key=${BUNDLED.firebaseApiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken: s.idToken }) });
+      cloud.signOut();
+      log('cloud-cleanup', 'ok');
+    } catch (e) { log('cloud-cleanup', e.message); }
+  }
   js(`closeMenu();closeModal();go('library')`);
   await new Promise((r) => setTimeout(r, 1500));
   await shot('02b-library.png');

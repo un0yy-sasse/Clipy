@@ -224,6 +224,7 @@ function go(v) {
   closeMenu();
   if (v === 'library') renderLibrary();
   else if (v === 'profile') renderProfile();
+  else if (v === 'friends') renderFriends();
   else renderSettings();
   $('#view').scrollTop = 0;
 }
@@ -746,6 +747,7 @@ function confirmDelete(c) {
 function renderCurrent() {
   if (view === 'library') renderLibrary();
   else if (view === 'profile') renderProfile();
+  else if (view === 'friends') renderFriends();
   else renderSettings();
 }
 
@@ -788,7 +790,7 @@ async function signInGoogle(after) {
   profile = await api.profile();
   settings = await api.getSettings();
   renderChip();
-  snack(r.ok ? `Signed in as ${profile.google.email}` : `Google: ${r.error}`, { ms: 3500 });
+  snack(r.ok ? (r.cloudError ? `Signed in, but Clipy Cloud failed: ${r.cloudError}` : `Signed in as ${profile.google.email}`) : `Google: ${r.error}`, { ms: 4500 });
   if (after) after(); else if (view === 'profile') renderProfile();
 }
 
@@ -888,7 +890,9 @@ function accountCardHTML(p) {
           <input id="aPass" type="password" placeholder="Password" autocomplete="current-password">
           <button class="btn primary" id="aSubmit" type="submit">Sign in${I.arrow}</button>
         </form>
-        <small class="conn-help">Your account and password stay on this PC (encrypted with scrypt).</small>
+        <small class="conn-help">${p.cloud && p.cloud.configured
+          ? 'Online account — sign in on any PC and keep your friends. <a href="#" id="aForgot">Forgot password?</a>'
+          : 'Your account and password stay on this PC (encrypted with scrypt).'}</small>
       </div>
     </div>`;
 }
@@ -896,6 +900,13 @@ function bindAccountCard() {
   if ($('#aOut')) $('#aOut').addEventListener('click', async () => { profile = await api.accountLogout(); renderChip(); renderProfile(); snack('Signed out'); });
   if ($('#aPw')) $('#aPw').addEventListener('click', passwordDialog);
   if (!$('#aForm')) return;
+  if ($('#aForgot')) $('#aForgot').addEventListener('click', async (e) => {
+    e.preventDefault();
+    const email = $('#aEmail').value.trim();
+    if (!email) { snack('Type your email first'); $('#aEmail').focus(); return; }
+    const r = await api.accountReset(email);
+    snack(r.ok ? `Reset link sent to ${email}` : r.error, { ms: 4000 });
+  });
   let mode = 'in';
   $('#aTabs').addEventListener('click', (e) => {
     const b = e.target.closest('button'); if (!b) return;
@@ -1067,6 +1078,134 @@ async function renderProfile() {
     $$('#dLimit button').forEach((x) => x.classList.toggle('on', x === b));
     settings = await api.setSettings({ discordLimitMB: Number(b.dataset.v) });
   });
+}
+
+// ───────────────────────────── friends (Clipy Cloud)
+let friendsTimer = null;
+const ONLINE_MS = 3 * 60 * 1000;
+function personAvatar(name, photo, cls = '') {
+  if (photo && /^https:\/\/lh3\.googleusercontent\.com\//.test(photo)) return `<span class="avatar ${cls}"><img src="${esc(photo)}" alt="" referrerpolicy="no-referrer"></span>`;
+  return `<span class="avatar ${cls}">${esc(initials(name) || '?')}</span>`;
+}
+const fmtCode = (c) => (c ? `${c.slice(0, 3)}-${c.slice(3)}` : '——');
+
+async function renderFriends(silent = false) {
+  clearTimeout(friendsTimer);
+  if (view !== 'friends') return;
+  if (!silent) $('#view').innerHTML = `<div class="page"><section class="hero"><div><div class="eyebrow">Friends</div><h1>Your squad<span class="ghost">.</span></h1></div></section><div class="loading-row"><span class="spinner"></span>Connecting to Clipy Cloud…</div></div>`;
+  const o = await api.friends();
+  if (view !== 'friends') return;
+  const head = `<section class="hero"><div><div class="eyebrow">Friends</div><h1>Your squad<span class="ghost">.</span></h1></div>
+    ${o.ok ? '<div class="hero-actions"><button class="btn" id="fRefresh">Refresh</button></div>' : ''}</section>`;
+
+  if (!o.ok) {
+    $('#navFriends').textContent = '';
+    const msg = o.reason === 'not-configured'
+      ? ['Friends are not available in this build', 'This version of Clipy was built without Clipy Cloud.', '']
+      : o.reason === 'signed-out'
+        ? ['Sign in to add friends', 'Friends need an online account. Use Google or create a Clipy account with your email — it takes 10 seconds.',
+          `<div class="empty-actions"><button class="btn primary" id="fGoogle">${I.google}Sign in with Google</button><button class="btn" id="fEmail">${I.mail}Use email</button></div>`]
+        : ['Could not reach Clipy Cloud', esc(o.error || 'Unknown error'), '<div class="empty-actions"><button class="btn" id="fRetry">Try again</button></div>'];
+    $('#view').innerHTML = `<div class="page">${head}<div class="empty"><div class="empty-icon">${I.user}</div><h2>${msg[0]}</h2><p>${msg[1]}</p>${msg[2]}</div></div>`;
+    if ($('#fGoogle')) $('#fGoogle').addEventListener('click', () => signInGoogle(() => renderFriends()));
+    if ($('#fEmail')) $('#fEmail').addEventListener('click', () => { go('profile'); setTimeout(() => { const e = $('#aEmail'); if (e) e.focus(); }, 60); });
+    if ($('#fRetry')) $('#fRetry').addEventListener('click', () => renderFriends());
+    return;
+  }
+
+  const online = (f) => o.now - f.lastSeen < ONLINE_MS;
+  const friends = [...o.friends].sort((a, b) => (online(b) - online(a)) || (b.lastSeen - a.lastSeen));
+  const nOnline = friends.filter(online).length;
+  $('#navFriends').textContent = o.incoming.length ? `${o.incoming.length} new` : nOnline ? `${nOnline} online` : friends.length ? String(friends.length) : '';
+  const feed = friends.flatMap((f) => (f.activity || []).map((a) => ({ ...a, who: f }))).sort((a, b) => b.at - a.at).slice(0, 14);
+
+  $('#view').innerHTML = `
+  <div class="page">
+    ${head}
+    <div class="friend-top">
+      <div class="code-card">
+        <div class="eyebrow">Your friend code</div>
+        <div class="code-big" id="myCode">${esc(fmtCode(o.me.code))}</div>
+        <div class="code-actions"><button class="btn" id="fCopy">${I.copy}Copy code</button><span>Share it — friends add you with it.</span></div>
+      </div>
+      <div class="add-card">
+        <div class="eyebrow">Add a friend</div>
+        <form class="add-form" id="fAdd">
+          <input id="fCode" maxlength="7" placeholder="ABC-123" spellcheck="false" autocomplete="off">
+          <button class="btn primary" type="submit">Send request${I.arrow}</button>
+        </form>
+        <small class="conn-help">Ask your friend for the code on their Friends page.</small>
+      </div>
+    </div>
+
+    ${o.incoming.length || o.outgoing.length ? `
+    <div class="section-title"><span class="num">01</span><h2>Requests</h2></div>
+    <div class="req-list">
+      ${o.incoming.map((r, i) => `
+        <div class="req in">${personAvatar(r.fromName, '', 'sm')}<div><b>${esc(r.fromName || 'Someone')}</b><small>wants to be your friend · ${esc(ago(r.created))}</small></div>
+          <button class="btn primary" data-acc="${i}">${I.check}Accept</button><button class="btn" data-dec="${i}">Decline</button></div>`).join('')}
+      ${o.outgoing.map((r, i) => `
+        <div class="req out">${personAvatar(r.toName, '', 'sm')}<div><b>${esc(r.toName || 'Player')}</b><small>request sent · waiting ${esc(ago(r.created).replace(' ago', ''))}</small></div>
+          <button class="btn ghost" data-can="${i}">Cancel</button></div>`).join('')}
+    </div>` : ''}
+
+    <div class="section-title"><span class="num">${o.incoming.length || o.outgoing.length ? '02' : '01'}</span><h2>Friends</h2><span class="st-meta">${friends.length} total · ${nOnline} online</span></div>
+    ${friends.length ? `<div class="friend-grid">${friends.map((f) => `
+      <div class="friend ${online(f) ? 'online' : ''}" data-uid="${esc(f.uid)}">
+        <div class="friend-head">
+          <span class="fa-wrap">${personAvatar(f.name, f.photo)}<i class="presence"></i></span>
+          <div class="fh-text"><b>${esc(f.name)}</b><small>${online(f)
+            ? (f.clipping ? (f.game ? `Clipping · ${esc(f.game)}` : 'Online · replay on') : 'Online')
+            : f.lastSeen ? `Last seen ${esc(ago(f.lastSeen))}` : 'Offline'}</small></div>
+          <button class="btn icon-only ghost" data-more="${esc(f.uid)}" title="More">${I.dots}</button>
+        </div>
+        <div class="friend-clips">
+          ${(f.activity || []).slice(0, 3).map((a) => `<div class="fc">${a.type === 'shot' ? I.shot : I.film}<span>${esc(a.title || a.game || 'Clip')}</span><em>${a.duration ? fmtDur(a.duration) + ' · ' : ''}${esc(ago(a.at))}</em></div>`).join('') || '<div class="fc empty-fc">No clips yet</div>'}
+        </div>
+      </div>`).join('')}</div>`
+      : `<div class="empty" style="padding:44px"><h2>No friends yet</h2><p>Send your code <b>${esc(fmtCode(o.me.code))}</b> to a friend, or add theirs above.</p></div>`}
+
+    ${feed.length ? `
+    <div class="section-title"><span class="num">${o.incoming.length || o.outgoing.length ? '03' : '02'}</span><h2>Recent from friends</h2></div>
+    <div class="feed">${feed.map((a) => `
+      <div class="feed-row">${personAvatar(a.who.name, a.who.photo, 'sm')}
+        <div><b>${esc(a.who.name)}</b> ${a.type === 'shot' ? 'took a screenshot' : 'saved a clip'}${a.game ? ` in <b>${esc(a.game)}</b>` : ''}<small>${esc(a.title || '')}${a.duration ? ` · ${fmtDur(a.duration)}` : ''}</small></div>
+        <em>${esc(ago(a.at))}</em></div>`).join('')}</div>` : ''}
+  </div>`;
+
+  $('#fRefresh').addEventListener('click', () => renderFriends());
+  $('#fCopy').addEventListener('click', () => navigator.clipboard.writeText(o.me.code).then(() => snack(`Code ${fmtCode(o.me.code)} copied`)));
+  const codeIn = $('#fCode');
+  codeIn.addEventListener('input', () => {
+    const v = codeIn.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6);
+    codeIn.value = v.length > 3 ? `${v.slice(0, 3)}-${v.slice(3)}` : v;
+  });
+  $('#fAdd').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    snack('Sending request…', { busy: true });
+    const r = await api.friendAdd(codeIn.value);
+    if (!r.ok) return snack(r.error, { ms: 3500 });
+    snack(r.accepted ? `You and ${r.name || 'your friend'} are now friends!` : `Request sent${r.name ? ` to ${r.name}` : ''}`);
+    renderFriends(true);
+  });
+  $$('[data-acc]').forEach((b) => b.addEventListener('click', async () => {
+    const req = o.incoming[Number(b.dataset.acc)];
+    const r = await api.friendAccept(req);
+    snack(r.ok ? `You and ${req.fromName || 'your friend'} are now friends` : r.error);
+    renderFriends(true);
+  }));
+  $$('[data-dec]').forEach((b) => b.addEventListener('click', async () => { await api.friendDecline(o.incoming[Number(b.dataset.dec)]); renderFriends(true); }));
+  $$('[data-can]').forEach((b) => b.addEventListener('click', async () => { await api.friendDecline(o.outgoing[Number(b.dataset.can)]); snack('Request cancelled'); renderFriends(true); }));
+  $$('[data-more]').forEach((b) => b.addEventListener('click', () => {
+    const f = friends.find((x) => x.uid === b.dataset.more);
+    openMenu(b, [{
+      icon: I.trash, label: `Remove ${f.name}`, run: () => dialog({
+        title: `Remove ${esc(f.name)}?`, body: '<p>You will no longer see each other\'s status and clips.</p>',
+        actions: [{ label: 'Cancel' }, { label: 'Remove', primary: true, run: async () => { await api.friendRemove(f.uid); snack('Friend removed'); renderFriends(true); } }],
+      }),
+    }]);
+  }));
+  friendsTimer = setTimeout(() => renderFriends(true), 30000);
 }
 
 // ───────────────────────────── onboarding

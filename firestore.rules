@@ -1,0 +1,42 @@
+rules_version = '2';
+// Clipy – Firestore security rules. Paste into Firebase console → Firestore Database → Rules → Publish.
+service cloud.firestore {
+  match /databases/{db}/documents {
+    function signedIn() { return request.auth != null; }
+
+    // public profile: name, picture, friend code, online status
+    match /users/{uid} {
+      allow read: if signedIn();
+      allow write: if signedIn() && request.auth.uid == uid;
+
+      // friend list: owner manages it; the other side may add itself only with a pending request
+      match /friends/{fid} {
+        allow read: if signedIn() && request.auth.uid == uid;
+        allow create: if signedIn() && (request.auth.uid == uid ||
+          (request.auth.uid == fid && exists(/databases/$(db)/documents/requests/$(uid + '_' + fid))));
+        allow delete: if signedIn() && (request.auth.uid == uid || request.auth.uid == fid);
+      }
+
+      // recent clips feed: visible to the owner and their friends only
+      match /activity/{aid} {
+        allow read: if signedIn() && (request.auth.uid == uid ||
+          exists(/databases/$(db)/documents/users/$(uid)/friends/$(request.auth.uid)));
+        allow write: if signedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // friend code → user id
+    match /codes/{code} {
+      allow get: if signedIn();
+      allow create: if signedIn() && request.resource.data.uid == request.auth.uid;
+    }
+
+    // friend requests, id = "<from>_<to>"
+    match /requests/{rid} {
+      allow read: if signedIn() && (resource.data.to == request.auth.uid || resource.data.from == request.auth.uid);
+      allow create: if signedIn() && request.resource.data.from == request.auth.uid
+        && rid == request.auth.uid + '_' + request.resource.data.to;
+      allow delete: if signedIn() && (resource.data.to == request.auth.uid || resource.data.from == request.auth.uid);
+    }
+  }
+}

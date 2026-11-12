@@ -35,6 +35,16 @@ Grab the `.exe` from **[Releases](../../releases/latest)**:
 - **Tray mode & autostart** – Clipy keeps running quietly
 - Clips are saved as **MP4 (H.264/AAC)** to `Videos\Clipy` – plays everywhere
 
+### New in 1.0.3
+
+- **Friends** – every player gets a 6-character friend code; send/accept requests, see who is online and clipping right now, and a feed of your friends' latest clips
+- **Online accounts** – Google sign-in and email/password accounts are real online accounts (Firebase), so your friends follow you to every PC; password reset by email
+- Sign-in keys are built into the app – nothing to set up
+
+### New in 1.0.2
+
+- Sign in with Google, Discord or email + password
+
 ### New in 1.0.1
 
 - **Discord integration** – connect a channel via webhook, send clips with one click, optional auto-post; clips over the upload limit (10 / 50 / 500 MB) are compressed automatically
