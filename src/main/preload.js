@@ -28,12 +28,17 @@ contextBridge.exposeInMainWorld('clipy', {
   googleHelp: inv('google:help'),
   discordLogin: inv('discord:login'),
   discordLogout: inv('discord:logout'),
+  discordCloud: inv('discord:cloud'),
   discordLoginHelp: inv('discord:loginhelp'),
   accountRegister: inv('account:register'),
   accountLogin: inv('account:login'),
   accountLogout: inv('account:logout'),
   accountPassword: inv('account:password'),
   accountReset: inv('account:reset'),
+  montage: inv('studio:montage'),
+  exportClip: inv('studio:export'),
+  highlights: inv('studio:highlights'),
+  bulk: inv('clips:bulk'),
   friends: inv('friends:overview'),
   friendAdd: inv('friends:add'),
   friendAccept: inv('friends:accept'),
@@ -53,7 +58,7 @@ contextBridge.exposeInMainWorld('clipy', {
   hotkeysEnabled: (on) => ipcRenderer.send('hotkeys', !!on),
   win: (action) => ipcRenderer.send('win', action),
   on: (channel, cb) => {
-    const allowed = ['state', 'library-changed', 'win-max'];
+    const allowed = ['state', 'library-changed', 'win-max', 'friends-activity'];
     if (!allowed.includes(channel)) return () => {};
     const fn = (_e, ...a) => cb(...a);
     ipcRenderer.on(channel, fn);

@@ -35,6 +35,17 @@ Grab the `.exe` from **[Releases](../../releases/latest)**:
 - **Tray mode & autostart** – Clipy keeps running quietly
 - Clips are saved as **MP4 (H.264/AAC)** to `Videos\Clipy` – plays everywhere
 
+### New in 1.0.4 – Clipy Studio
+
+- **Montage maker** – select clips (Ctrl/Shift + click) and join them with transitions (fade, black, dissolve, slide, circle, cut)
+- **Export for TikTok / Shorts / Reels** – 9:16 vertical or 1:1 square with a blurred background, plus slow-mo (0.25× / 0.5×) and speed-up
+- **Auto-Highlight** – finds the loudest moments in a clip (kills, shouts, explosions) and sets the trim selection for you (`H`)
+- **Long-clip hotkey** – `F7` saves the last 2 minutes (1–5 min), `F8` stays your quick clip
+- **Bulk actions** – select many clips to favorite, delete or turn into a montage
+- **Hover scrubbing** – move the mouse across a thumbnail to scrub through the clip
+- **Friend alerts** – a pop-up when a friend saves a clip; **Friends with Discord** sign-in
+- **Shortcut sheet** – press `?` anywhere
+
 ### New in 1.0.3
 
 - **Friends** – every player gets a 6-character friend code; send/accept requests, see who is online and clipping right now, and a feed of your friends' latest clips

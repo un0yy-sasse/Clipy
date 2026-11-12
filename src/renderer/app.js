@@ -222,6 +222,7 @@ function go(v) {
   $('#profileChip').classList.toggle('active', v === 'profile');
   closeModal();
   closeMenu();
+  renderSelBar();
   if (v === 'library') renderLibrary();
   else if (v === 'profile') renderProfile();
   else if (v === 'friends') renderFriends();
@@ -273,6 +274,7 @@ function renderLibrary() {
       <div class="hero-actions">
         <button class="btn" id="openDir">${I.folder}Folder</button>
         <button class="btn" id="heroShot">${I.shot}Screenshot <kbd>${esc(settings.screenshotHotkey || '—')}</kbd></button>
+        <button class="btn" id="heroLong" title="Save the last ${fmtDur(settings.longClipLength)}">${fmtDur(settings.longClipLength)} <kbd>${esc(settings.longClipHotkey || '—')}</kbd></button>
         <button class="btn primary" id="heroClip">${I.rec}Save clip <kbd>${esc(settings.clipHotkey || '—')}</kbd></button>
       </div>
     </section>
@@ -312,6 +314,7 @@ function renderLibrary() {
   }));
   $('#openDir').addEventListener('click', () => api.openDir());
   $('#heroClip').addEventListener('click', () => api.saveClip());
+  $('#heroLong').addEventListener('click', () => api.saveClip(settings.longClipLength));
   $('#heroShot').addEventListener('click', () => api.screenshot());
   if (latest) bindFeature(latest);
   renderStatus();
@@ -419,13 +422,20 @@ function card(c) {
         <span class="badge-type">${c.type === 'shot' ? I.shot : I.film}</span>
         ${c.type === 'clip' ? `<span class="badge-dur">${fmtDur(c.duration)}</span>` : ''}
         <div class="busy-veil"><span class="spinner"></span></div>
+        <span class="sel-check">${I.check}</span>
+        <i class="scrub"></i>
+        ${c.kind ? `<span class="badge-kind">${esc({ montage: 'Montage', vertical: '9:16', square: '1:1', original: 'Edit' }[c.kind] || c.kind)}</span>` : ''}
       </div>
       <div class="card-meta">
         <div class="card-title">${esc(c.title)}${c.sharedDiscord ? `<span class="shared-dot" title="Shared to Discord">${I.discord}</span>` : ''}</div>
         <div class="card-sub"><span>${fmtTime(c.createdAt)}</span><i>/</i><span>${fmtSize(c.size)}</span>${c.type === 'shot' && c.width ? `<i>/</i><span>${c.width}×${c.height}</span>` : ''}${c.game && c.game !== c.title ? `<i>/</i><span class="g">${esc(c.game)}</span>` : ''}</div>
       </div>
     </article>`);
-  node.addEventListener('click', () => openPlayer(c.id));
+  if (sel.has(c.id)) node.classList.add('selected');
+  node.addEventListener('click', (e) => {
+    if (e.ctrlKey || e.shiftKey || sel.size) { e.preventDefault(); toggleSelect(c.id, e.shiftKey); return; }
+    openPlayer(c.id);
+  });
   node.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') openPlayer(c.id);
     if (e.key.toLowerCase() === 'c' && e.ctrlKey) copyClip(c);
@@ -467,11 +477,167 @@ function card(c) {
     });
     node.addEventListener('mouseleave', () => {
       clearTimeout(t);
-      node.classList.remove('previewing');
+      node.classList.remove('previewing', 'scrubbing');
       if (v) { v.pause(); v.removeAttribute('src'); v.load(); v.remove(); v = null; }
     });
+    // hover scrubbing: move the mouse across the thumbnail to seek through the clip
+    const thumb = $('.thumb', node);
+    let lastX = null;
+    thumb.addEventListener('mousemove', (e) => {
+      if (!v || !isFinite(v.duration) || !v.duration) return;
+      if (lastX === null) { lastX = e.clientX; return; }
+      if (Math.abs(e.clientX - lastX) < 3 && !node.classList.contains('scrubbing')) return;
+      lastX = e.clientX;
+      const r = thumb.getBoundingClientRect();
+      const ratio = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+      node.classList.add('scrubbing');
+      v.pause();
+      v.currentTime = ratio * v.duration;
+      $('.scrub', node).style.left = `${ratio * 100}%`;
+    });
+    thumb.addEventListener('mouseleave', () => { lastX = null; });
   }
   return node;
+}
+
+// ───────────────────────────── multi-select + bulk actions
+const sel = new Set();
+let lastSel = null;
+function toggleSelect(id, range) {
+  if (range && lastSel) {
+    const list = filtered().map((c) => c.id);
+    const [i, j] = [list.indexOf(lastSel), list.indexOf(id)].sort((x, y) => x - y);
+    if (i >= 0 && j >= 0) list.slice(i, j + 1).forEach((x) => sel.add(x));
+  } else if (sel.has(id)) sel.delete(id); else sel.add(id);
+  lastSel = id;
+  $$('.card').forEach((n) => n.classList.toggle('selected', sel.has(n.dataset.id)));
+  renderSelBar();
+}
+function clearSelection() { sel.clear(); lastSel = null; $$('.card.selected').forEach((n) => n.classList.remove('selected')); renderSelBar(); }
+function renderSelBar() {
+  let bar = $('#selBar');
+  if (!sel.size || view !== 'library') { if (bar) bar.remove(); return; }
+  if (!bar) { bar = el('<div class="sel-bar" id="selBar"></div>'); document.body.appendChild(bar); }
+  const items = lib.filter((c) => sel.has(c.id));
+  const clips = items.filter((c) => c.type === 'clip');
+  const dur = clips.reduce((s, c) => s + (c.duration || 0), 0);
+  bar.innerHTML = `
+    <div class="sb-count"><span><b>${sel.size}</b> selected</span><small>${clips.length ? fmtDur(dur) : ''}</small></div>
+    <button class="btn primary" data-sb="montage" ${clips.length < 2 ? 'disabled' : ''}>${I.film}Make montage</button>
+    <button class="btn" data-sb="fav">${I.star}Favorite</button>
+    <button class="btn" data-sb="all">Select all</button>
+    <button class="btn danger" data-sb="del">${I.trash}Delete</button>
+    <button class="x-btn" data-sb="clear" title="Clear (Esc)">${I.x}</button>`;
+  bar.onclick = async (e) => {
+    const b = e.target.closest('[data-sb]'); if (!b) return;
+    const a = b.dataset.sb;
+    if (a === 'clear') clearSelection();
+    if (a === 'all') { filtered().forEach((c) => sel.add(c.id)); $$('.card').forEach((n) => n.classList.toggle('selected', sel.has(n.dataset.id))); renderSelBar(); }
+    if (a === 'fav') { await api.bulk('favorite', [...sel]); lib = await api.library(); snack(`${sel.size} added to favorites`); clearSelection(); renderGroups(); }
+    if (a === 'montage') montageDialog(clips);
+    if (a === 'del') dialog({
+      title: `Delete ${sel.size} item${sel.size === 1 ? '' : 's'}?`, body: '<p>The files are moved to the Recycle Bin and removed from your library.</p>',
+      actions: [{ label: 'Cancel' }, { label: 'Delete', primary: true, icon: I.trash, run: async () => {
+        const n = sel.size; await api.bulk('delete', [...sel]); clearSelection(); lib = await api.library();
+        $('#navCount').textContent = lib.length; renderLibrary(); snack(`${n} moved to Recycle Bin`);
+      } }],
+    });
+  };
+}
+
+const TRANSITIONS = [['fade', 'Fade'], ['fadeblack', 'Black'], ['dissolve', 'Dissolve'], ['slideleft', 'Slide'], ['circleopen', 'Circle'], ['none', 'Cut']];
+function montageDialog(clips) {
+  let order = [...clips].sort((a, b) => a.createdAt - b.createdAt);
+  let transition = 'fade';
+  const listHTML = () => order.map((c, i) => `
+    <div class="mt-row" data-i="${i}">
+      <span class="mt-n">${i + 1}</span>
+      ${c.thumbUrl ? `<img src="${esc(c.thumbUrl)}" alt="">` : '<span class="mt-ph"></span>'}
+      <div><b>${esc(c.title)}</b><small>${fmtDur(c.duration)}</small></div>
+      <button class="x-btn sm" data-mv="-1" ${i === 0 ? 'disabled' : ''} title="Move up"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+      <button class="x-btn sm" data-mv="1" ${i === order.length - 1 ? 'disabled' : ''} title="Move down"><svg viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></svg></button>
+    </div>`).join('');
+  const total = () => order.reduce((s, c) => s + c.duration, 0) - (transition === 'none' ? 0 : 0.6 * (order.length - 1));
+  dialog({
+    wide: true,
+    title: `${I.film} Make a montage`,
+    body: `
+      <p>Clips are joined in this order. Drag-free: use the arrows to reorder.</p>
+      <div class="mt-list" id="mtList">${listHTML()}</div>
+      <div class="field"><span>Transition</span><div class="seg" id="mtTrans">${TRANSITIONS.map(([v, l]) => `<button data-v="${v}" class="${v === transition ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+      <div class="mt-total" id="mtTotal">Total ≈ <b>${fmtDur(total())}</b></div>`,
+    actions: [
+      { label: 'Cancel' },
+      { label: 'Create montage', primary: true, icon: I.film, run: async (box, btn) => {
+        btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Rendering…';
+        snack(`Rendering montage of ${order.length} clips…`, { busy: true });
+        const r = await api.montage(order.map((c) => c.id), { transition });
+        if (!r.ok) { snack(`Montage failed: ${r.error}`, { ms: 5000 }); btn.disabled = false; btn.innerHTML = `${I.film}Create montage`; return true; }
+        snack('Montage ready!'); clearSelection();
+        lib = await api.library(); $('#navCount').textContent = lib.length; renderLibrary(); openPlayer(r.id);
+      } },
+    ],
+    onMount: (box) => {
+      $('#mtList', box).addEventListener('click', (e) => {
+        const b = e.target.closest('[data-mv]'); if (!b) return;
+        const i = Number(b.closest('.mt-row').dataset.i), d = Number(b.dataset.mv);
+        [order[i], order[i + d]] = [order[i + d], order[i]];
+        $('#mtList', box).innerHTML = listHTML();
+      });
+      $('#mtTrans', box).addEventListener('click', (e) => {
+        const b = e.target.closest('button'); if (!b) return;
+        transition = b.dataset.v;
+        $$('#mtTrans button', box).forEach((x) => x.classList.toggle('on', x === b));
+        $('#mtTotal', box).innerHTML = `Total ≈ <b>${fmtDur(total())}</b>`;
+      });
+    },
+  });
+}
+
+function exportDialog(c, range) {
+  let format = 'vertical', speed = 1;
+  const [a, b] = range || [0, c.duration];
+  const len = () => (b - a) / speed;
+  const FORMATS = [['vertical', '9:16', 'TikTok · Shorts · Reels'], ['square', '1:1', 'Instagram · X'], ['original', '16:9', 'Original']];
+  dialog({
+    wide: true,
+    title: `${I.share} Export for social`,
+    body: `
+      <div class="fmt-grid" id="fmtGrid">${FORMATS.map(([v, r, d]) => `
+        <button class="fmt ${v === format ? 'on' : ''}" data-v="${v}"><span class="fmt-shape ${v}"></span><b>${r}</b><small>${d}</small></button>`).join('')}</div>
+      <div class="field"><span>Speed</span><div class="seg" id="spSeg">${[[0.25, '0.25×'], [0.5, '0.5× slow-mo'], [1, '1×'], [1.5, '1.5×'], [2, '2×']].map(([v, l]) => `<button data-v="${v}" class="${v === speed ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+      <div class="mt-total" id="exInfo"></div>`,
+    actions: [
+      { label: 'Cancel' },
+      { label: 'Export', primary: true, icon: I.share, run: async (box, btn) => {
+        btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Exporting…';
+        snack('Exporting…', { busy: true });
+        const r = await api.exportClip(c.id, { format, speed, a, b });
+        if (!r.ok) { snack(`Export failed: ${r.error}`, { ms: 5000 }); btn.disabled = false; btn.innerHTML = `${I.share}Export`; return true; }
+        snack('Export ready — added to your library');
+        lib = await api.library(); $('#navCount').textContent = lib.length; openPlayer(r.id);
+      } },
+    ],
+    onMount: (box) => {
+      const info = () => { $('#exInfo', box).innerHTML = `Range <b>${fmtDur(a)}–${fmtDur(b)}</b> · result <b>${fmtPrecise(len())}</b>`; };
+      info();
+      $('#fmtGrid', box).addEventListener('click', (e) => { const t = e.target.closest('.fmt'); if (!t) return; format = t.dataset.v; $$('.fmt', box).forEach((x) => x.classList.toggle('on', x === t)); });
+      $('#spSeg', box).addEventListener('click', (e) => { const t = e.target.closest('button'); if (!t) return; speed = Number(t.dataset.v); $$('#spSeg button', box).forEach((x) => x.classList.toggle('on', x === t)); info(); });
+    },
+  });
+}
+
+function shortcutsDialog() {
+  const rows = [
+    ['Global', [[settings.clipHotkey, 'Save clip'], [settings.longClipHotkey, `Save long clip (${fmtDur(settings.longClipLength)})`], [settings.screenshotHotkey, 'Screenshot']]],
+    ['Library', [['Ctrl+F', 'Search'], ['Ctrl+Click', 'Select clips'], ['Shift+Click', 'Select a range'], ['Esc', 'Clear selection'], ['Ctrl+C', 'Copy clip'], ['Del', 'Delete']]],
+    ['Player', [['Space', 'Play / pause'], ['← →', '±5 s (Shift ±1 s)'], [', .', 'Frame by frame'], ['↑ ↓', 'Previous / next'], ['I  O', 'Trim start / end'], ['H', 'Find highlight'], ['E', 'Export for social'], ['S', 'Speed'], ['F', 'Fullscreen'], ['M', 'Mute']]],
+  ];
+  dialog({
+    wide: true, title: 'Keyboard shortcuts',
+    body: `<div class="kb-grid">${rows.map(([h, list]) => `<div><div class="eyebrow">${h}</div>${list.map(([k, d]) => `<div class="kb-row"><kbd>${esc(k || '—')}</kbd><span>${esc(d)}</span></div>`).join('')}</div>`).join('')}</div>`,
+    actions: [{ label: 'Close', primary: true }],
+  });
 }
 
 async function reloadLibrary() {
@@ -527,14 +693,17 @@ function openPlayer(id) {
       <button class="ctrl-btn speed" id="pSpeed" title="Speed (S)">1×</button>
       <button class="ctrl-btn stroke" id="pMute" title="Sound (M)">${I.vol}</button>
       <button class="ctrl-btn stroke" id="pFull" title="Fullscreen (F)">${I.full}</button>
-    </div>` : ''}
+    </div>
+    <div class="moments hidden" id="moments"></div>` : ''}
     <div class="player-actions">
       <button class="btn ${c.favorite ? 'on' : ''}" id="pFav">${I.star}${c.favorite ? 'Favorite' : 'Add to favorites'}</button>
-      ${isClip ? `<button class="btn" id="pTrim" disabled>${I.scissors}Save selection</button>` : ''}
+      ${isClip ? `<button class="btn" id="pTrim" disabled>${I.scissors}Save selection</button>
+      <button class="btn" id="pHigh" title="Find the loudest moments (H)"><svg viewBox="0 0 24 24"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg>Highlight</button>
+      <button class="btn" id="pExport" title="Export for TikTok, Shorts, Reels (E)">${I.share}Export</button>` : ''}
       <button class="btn" id="pDiscord">${I.discord}Discord</button>
       <button class="btn" id="pShare">${I.share}Share</button>
       <span class="grow"></span>
-      <span class="kbd-hint">${isClip ? '<kbd>I</kbd><kbd>O</kbd> trim · <kbd>,</kbd><kbd>.</kbd> frame · <kbd>S</kbd> speed' : ''}</span>
+      <span class="kbd-hint">${isClip ? '<kbd>I</kbd><kbd>O</kbd> trim · <kbd>H</kbd> highlight · <kbd>?</kbd> all keys' : ''}</span>
       <button class="btn danger" id="pDel">${I.trash}Delete</button>
     </div>
   </div>`;
@@ -654,6 +823,33 @@ function openPlayer(id) {
   tl.addEventListener('pointerup', end);
   tl.addEventListener('pointercancel', end);
 
+  $('#pExport').addEventListener('click', () => { v.pause(); exportDialog(c, [a, b]); });
+  const findHighlights = async () => {
+    const btn = $('#pHigh');
+    if (btn.disabled) return;
+    btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>Analyzing…';
+    const r = await api.highlights(c.id);
+    btn.disabled = false; btn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg>Highlight';
+    if (!r.ok) { snack(r.error, { ms: 3500 }); return; }
+    const box = $('#moments');
+    if (!r.moments.length) { snack('No standout moment found'); return; }
+    const pick = (m) => { a = m.a; b = m.b; layout(); v.currentTime = m.a; v.play().catch(() => {}); };
+    box.innerHTML = `<span class="mo-label"><svg viewBox="0 0 24 24"><path d="M13 3L5 14h6l-1 7 8-11h-6z"/></svg>Highlights</span>${r.moments.map((m, i) => `
+      <button class="mo" data-m="${i}"><b>${fmtDur(m.t)}</b><span>+${m.boost} LU louder</span></button>`).join('')}
+      <span class="mo-hint">Selection set — save it or export it</span>`;
+    box.classList.remove('hidden');
+    box.querySelectorAll('[data-m]').forEach((x) => x.addEventListener('click', () => {
+      box.querySelectorAll('.mo').forEach((y) => y.classList.toggle('on', y === x));
+      pick(r.moments[Number(x.dataset.m)]);
+    }));
+    // pick the strongest moment right away
+    const best = r.moments.reduce((p, m) => (m.boost > p.boost ? m : p), r.moments[0]);
+    box.querySelectorAll('.mo')[r.moments.indexOf(best)].classList.add('on');
+    pick(best);
+    snack(`Best moment at ${fmtDur(best.t)} — selection set`);
+  };
+  $('#pHigh').addEventListener('click', findHighlights);
+
   $('#pTrim').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true;
@@ -688,6 +884,8 @@ function openPlayer(id) {
     else if (k === 'f') $('#pFull').click();
     else if (k === 'm') $('#pMute').click();
     else if (k === 's') $('#pSpeed').click();
+    else if (k === 'h') findHighlights();
+    else if (k === 'e') { v.pause(); exportDialog(c, [a, b]); }
     else if (k === 'c' && e.ctrlKey) copyClip(c);
   };
   window.addEventListener('keydown', onKey);
@@ -836,7 +1034,7 @@ async function signInDiscord(after) {
   profile = await api.profile();
   settings = await api.getSettings();
   renderChip();
-  snack(r.ok ? `Signed in as @${profile.discordUser.username}` : `Discord: ${r.error}`, { ms: 4000 });
+  snack(r.ok ? (r.cloudError ? `Signed in, but Friends are not available: ${r.cloudError}` : `Signed in as @${profile.discordUser.username}`) : `Discord: ${r.error}`, { ms: 4500 });
   if (after) after(); else if (view === 'profile') renderProfile();
 }
 
@@ -1084,7 +1282,7 @@ async function renderProfile() {
 let friendsTimer = null;
 const ONLINE_MS = 3 * 60 * 1000;
 function personAvatar(name, photo, cls = '') {
-  if (photo && /^https:\/\/lh3\.googleusercontent\.com\//.test(photo)) return `<span class="avatar ${cls}"><img src="${esc(photo)}" alt="" referrerpolicy="no-referrer"></span>`;
+  if (photo && /^https:\/\/(lh3\.googleusercontent\.com|cdn\.discordapp\.com)\//.test(photo)) return `<span class="avatar ${cls}"><img src="${esc(photo)}" alt="" referrerpolicy="no-referrer"></span>`;
   return `<span class="avatar ${cls}">${esc(initials(name) || '?')}</span>`;
 }
 const fmtCode = (c) => (c ? `${c.slice(0, 3)}-${c.slice(3)}` : '——');
@@ -1103,11 +1301,21 @@ async function renderFriends(silent = false) {
     const msg = o.reason === 'not-configured'
       ? ['Friends are not available in this build', 'This version of Clipy was built without Clipy Cloud.', '']
       : o.reason === 'signed-out'
-        ? ['Sign in to add friends', 'Friends need an online account. Use Google or create a Clipy account with your email — it takes 10 seconds.',
-          `<div class="empty-actions"><button class="btn primary" id="fGoogle">${I.google}Sign in with Google</button><button class="btn" id="fEmail">${I.mail}Use email</button></div>`]
+        ? ['Sign in to add friends', 'Friends need an account. Use Discord, Google or your email — it takes 10 seconds.',
+          `<div class="empty-actions">
+            <button class="btn primary" id="fDiscord">${I.discord}${profile.discordUser ? `Continue as @${esc(profile.discordUser.username)}` : 'Sign in with Discord'}</button>
+            <button class="btn" id="fGoogle">${I.google}Google</button><button class="btn" id="fEmail">${I.mail}Email</button></div>
+          <p class="fine">Discord friends are linked to this PC. Using several PCs? Pick Google or email.</p>`]
         : ['Could not reach Clipy Cloud', esc(o.error || 'Unknown error'), '<div class="empty-actions"><button class="btn" id="fRetry">Try again</button></div>'];
     $('#view').innerHTML = `<div class="page">${head}<div class="empty"><div class="empty-icon">${I.user}</div><h2>${msg[0]}</h2><p>${msg[1]}</p>${msg[2]}</div></div>`;
     if ($('#fGoogle')) $('#fGoogle').addEventListener('click', () => signInGoogle(() => renderFriends()));
+    if ($('#fDiscord')) $('#fDiscord').addEventListener('click', async () => {
+      if (!profile.discordUser) return signInDiscord(() => renderFriends());
+      snack('Connecting…', { busy: true });
+      const r = await api.discordCloud();
+      snack(r.ok ? 'Connected — share your friend code!' : `Could not connect: ${r.error}`, { ms: 4000 });
+      renderFriends();
+    });
     if ($('#fEmail')) $('#fEmail').addEventListener('click', () => { go('profile'); setTimeout(() => { const e = $('#aEmail'); if (e) e.focus(); }, 60); });
     if ($('#fRetry')) $('#fRetry').addEventListener('click', () => renderFriends());
     return;
@@ -1278,7 +1486,7 @@ async function renderSettings() {
   const sw = (key) => `<button class="switch ${s[key] ? 'on' : ''}" data-switch="${key}" role="switch" aria-checked="${!!s[key]}"></button>`;
   const range = (key, dep) => `<div class="range ${dep && !s[dep] ? 'disabled' : ''}" data-dep="${dep || ''}"><input type="range" min="0" max="200" step="5" value="${s[key]}" data-range="${key}"><output>${s[key]}%</output></div>`;
   const row = (title, desc, ctrl) => `<div class="row"><div class="row-text"><b>${title}</b><small>${desc}</small></div><div class="row-ctrl">${ctrl}</div></div>`;
-  const hk = (key) => `<button class="hotkey ${state.hotkeyErrors && state.hotkeyErrors.includes(key === 'clipHotkey' ? 'clip' : 'shot') ? 'bad' : ''}" data-hotkey="${key}">${esc(s[key] || '—')}</button>`;
+  const hk = (key) => `<button class="hotkey ${state.hotkeyErrors && state.hotkeyErrors.includes(HK_NAME[key]) ? 'bad' : ''}" data-hotkey="${key}">${esc(s[key] || '—')}</button>`;
   const mon = s.monitor != null && displays.some((d) => d.id === String(s.monitor)) ? String(s.monitor) : (displays.find((d) => d.primary) || displays[0] || {}).id;
 
   $('#view').innerHTML = `
@@ -1310,6 +1518,8 @@ async function renderSettings() {
           <div class="section-head"><span class="num">03</span><h2>Hotkeys</h2></div>
           ${row('Save clip', 'Click, then press a key or combo. Works globally – even in-game.', hk('clipHotkey'))}
           ${row('Screenshot', 'Saves a still image at full resolution.', hk('screenshotHotkey'))}
+          ${row('Save long clip', 'A second hotkey for the big moments — saves a longer stretch.', hk('longClipHotkey'))}
+          ${row('Long clip length', 'How far back the long-clip hotkey reaches.', seg('longClipLength', [[60, '1m'], [120, '2m'], [180, '3m'], [300, '5m']], true))}
         </div>
         <div class="section" id="s-store">
           <div class="section-head"><span class="num">04</span><h2>Storage</h2></div>
@@ -1322,6 +1532,8 @@ async function renderSettings() {
           ${row('Keep running in tray', 'Keep recording in the background when the window is closed.', sw('minimizeToTray'))}
           ${row('Overlay notification', 'Small popup in the top-right when a clip is saved.', sw('overlay'))}
           ${row('Sound cue', 'Short beep to confirm a clip.', sw('soundCue'))}
+          ${row('Friend alerts', 'Pop-up when one of your friends saves a clip.', sw('friendAlerts'))}
+          ${row('Keyboard shortcuts', 'All hotkeys at a glance. Press <kbd>?</kbd> anywhere.', '<button class="btn" id="kbBtn">Show shortcuts</button>')}
           ${row('Check for updates', 'Shows a badge in the sidebar when a new version is on GitHub.', sw('checkUpdates'))}
           ${row('Welcome tour', 'Show the intro screens again.', '<button class="btn" id="tour">Replay tour</button>')}
         </div>
@@ -1365,6 +1577,7 @@ async function renderSettings() {
     if (d) { settings.clipsDir = d; $('#dirPath').textContent = d; snack('Save location changed'); }
   });
   $('#tour').addEventListener('click', () => onboarding());
+  $('#kbBtn').addEventListener('click', shortcutsDialog);
   $('#ghRepo').addEventListener('click', () => api.external('repo'));
   $$('[data-hotkey]').forEach((b) => b.addEventListener('click', () => listenHotkey(b)));
 
@@ -1420,6 +1633,7 @@ function toAccel(e) {
   }
   return { accel: [...mods, k].join('+') };
 }
+const HK_NAME = { clipHotkey: 'clip', screenshotHotkey: 'shot', longClipHotkey: 'long' };
 let hotkeyListen = null;
 function listenHotkey(btn) {
   if (hotkeyListen) hotkeyListen.cancel();
@@ -1433,12 +1647,11 @@ function listenHotkey(btn) {
     btn.classList.remove('listening');
     hotkeyListen = null;
     if (accel) {
-      const other = key === 'clipHotkey' ? 'screenshotHotkey' : 'clipHotkey';
-      if (settings[other] === accel) { snack('That key is already in use'); btn.textContent = prev; api.hotkeysEnabled(true); return; }
+      if (Object.keys(HK_NAME).some((k) => k !== key && settings[k] === accel)) { snack('That key is already in use'); btn.textContent = prev; api.hotkeysEnabled(true); return; }
       settings = await api.setSettings({ [key]: accel });
       state = await api.state();
       btn.textContent = accel;
-      const bad = state.hotkeyErrors.includes(key === 'clipHotkey' ? 'clip' : 'shot');
+      const bad = state.hotkeyErrors.includes(HK_NAME[key]);
       btn.classList.toggle('bad', bad);
       snack(bad ? 'Key is taken by another app' : `Hotkey set: ${accel}`);
       renderStatus();
@@ -1472,12 +1685,19 @@ $('#sideToggle').addEventListener('click', async () => {
   renderStatus();
 });
 window.addEventListener('keydown', (e) => {
+  const typing = /INPUT|TEXTAREA/.test(document.activeElement && document.activeElement.tagName);
+  if (e.key === '?' && !typing && !document.querySelector('.confirm')) { e.preventDefault(); shortcutsDialog(); return; }
+  if (e.key === 'Escape' && sel.size && $('#modal').classList.contains('hidden') && !document.querySelector('.confirm')) { clearSelection(); return; }
+  if (e.ctrlKey && e.key.toLowerCase() === 'a' && view === 'library' && !typing && $('#modal').classList.contains('hidden')) {
+    e.preventDefault(); filtered().forEach((c) => sel.add(c.id)); $$('.card').forEach((n) => n.classList.toggle('selected', sel.has(n.dataset.id))); renderSelBar(); return;
+  }
   if (e.ctrlKey && e.key.toLowerCase() === 'f' && view === 'library' && $('#modal').classList.contains('hidden')) { e.preventDefault(); const q = $('#q'); if (q) q.focus(); }
 });
 window.addEventListener('resize', closeMenu);
 $('#view').addEventListener('scroll', closeMenu);
 api.on('state', (s) => { state = s; renderStatus(); renderInfo(); });
 api.on('library-changed', reloadLibrary);
+api.on('friends-activity', () => { if (view === 'friends') renderFriends(true); });
 
 (async () => {
   [state, settings, lib, profile] = await Promise.all([api.state(), api.getSettings(), api.library(), api.profile()]);

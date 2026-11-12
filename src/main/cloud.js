@@ -41,6 +41,7 @@ module.exports = function createCloud({ userDir, config }) {
     TOO_MANY_ATTEMPTS_TRY_LATER: 'Too many attempts – try again in a few minutes',
     INVALID_EMAIL: 'Enter a valid email address',
     OPERATION_NOT_ALLOWED: 'This sign-in method is not enabled in Firebase yet',
+    ADMIN_ONLY_OPERATION: 'This sign-in method is not enabled in Firebase yet',
     CONFIGURATION_NOT_FOUND: 'Firebase Authentication is not set up yet',
   };
   async function idp(endpoint, body) {
@@ -71,6 +72,8 @@ module.exports = function createCloud({ userDir, config }) {
     postBody: `id_token=${encodeURIComponent(googleIdToken)}&providerId=google.com`,
     requestUri: 'http://localhost', returnIdpCredential: true, returnSecureToken: true,
   }), 'google');
+  // Discord users: a Clipy Cloud account bound to this PC (Firebase can't verify Discord without a server)
+  const signInDevice = async (label) => setSession(await idp('signUp', { returnSecureToken: true }), label || 'device');
   async function changePassword(newPassword) {
     const t = await token();
     const j = await idp('update', { idToken: t, password: newPassword, returnSecureToken: true });
@@ -237,7 +240,7 @@ module.exports = function createCloud({ userDir, config }) {
   }
 
   return {
-    configured, session: () => session, signUpEmail, signInEmail, signInGoogle, signOut, changePassword, resetPassword,
+    configured, session: () => session, signUpEmail, signInEmail, signInGoogle, signInDevice, signOut, changePassword, resetPassword,
     ensureProfile, heartbeat, sendRequest, accept, decline, removeFriend, overview, postActivity,
   };
 };

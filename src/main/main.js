@@ -43,6 +43,9 @@ const DEFAULTS = {
   micVolume: 100,
   clipHotkey: 'F8',
   screenshotHotkey: 'F9',
+  longClipHotkey: 'F7',
+  longClipLength: 120,
+  friendAlerts: true,
   clipsDir: TEST_DIR ? path.join(TEST_DIR, 'clips') : path.join(app.getPath('videos'), 'Clipy'),
   launchOnStartup: false,
   minimizeToTray: true,
@@ -218,7 +221,8 @@ function purgeSessions() {
   }
 }
 function pruneSessions() {
-  const keep = Math.ceil(settings.clipLength / SEG_SECONDS) + 2;
+  const longest = Math.max(settings.clipLength, settings.longClipHotkey ? settings.longClipLength || 0 : 0);
+  const keep = Math.ceil(longest / SEG_SECONDS) + 2;
   const done = [...sessions.values()].filter((s) => s.done).sort((a, b) => a.id - b.id);
   for (let i = 0; i < done.length - keep; i++) {
     const s = done[i];
@@ -316,14 +320,15 @@ function stamp(d) {
 }
 const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 
-async function saveClip() {
+async function saveClip(length) {
   if (!settings.bufferEnabled || !rec.ready) {
     toast({ kind: 'error', title: 'Replay is off', sub: 'Turn on the buffer in Clipy' });
     return { ok: false, error: 'Replay buffer is not active' };
   }
   if (saving) return { ok: false, error: 'Already saving' };
   saving = true; pushState();
-  toast({ kind: 'progress', title: 'Saving clip', sub: `Last ${settings.clipLength}s`, sound: true });
+  const wanted = Number(length) || settings.clipLength;
+  toast({ kind: 'progress', title: wanted > settings.clipLength ? 'Saving long clip' : 'Saving clip', sub: `Last ${wanted}s`, sound: true });
   let pick = [];
   try {
     const gameP = detectGame().catch(() => null);
@@ -331,7 +336,7 @@ async function saveClip() {
     recWin.webContents.send('rec:rotate');
     await waitDone(old);
 
-    const len = settings.clipLength;
+    const len = wanted;
     const done = [...sessions.values()].filter((s) => s.done && s.bytes > 0 && s.end).sort((a, b) => a.id - b.id);
     let total = 0;
     for (let i = done.length - 1; i >= 0 && total < len; i--) {
@@ -728,10 +733,24 @@ async function discordLogin() {
   settings.discordUser = { id: me.id, username: me.username, name: me.global_name || me.username, avatar, since: Date.now() };
   if (!settings.profileName) settings.profileName = settings.discordUser.name;
   if (!settings.avatar && avatar) settings.avatar = avatar;
+  settings.discordUser.photoUrl = me.avatar ? `https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.png?size=128` : '';
   saveSettings();
+  const cloudError = await discordCloudLink();
   showMain();
-  return { ok: true };
+  return { ok: true, cloudError };
 }
+// gives Discord users a Clipy Cloud account (bound to this PC) so Friends work for them too
+async function discordCloudLink() {
+  if (!cloud.configured() || !settings.discordUser) return null;
+  try {
+    const s = cloud.session();
+    if (!s) await cloud.signInDevice('discord');
+    else if (s.provider !== 'discord') return null; // already signed in with Google/email – keep that account
+    await cloud.ensureProfile({ name: settings.profileName || settings.discordUser.name, photo: settings.discordUser.photoUrl || '' });
+    return null;
+  } catch (e) { return e.message; }
+}
+ipcMain.handle('discord:cloud', async () => { const err = await discordCloudLink(); return err ? { ok: false, error: err } : { ok: true }; });
 
 // ── Clipy accounts (email + password, stored only on this PC; passwords are scrypt-hashed, never saved in plain text)
 const ACCOUNTS_FILE = path.join(USER, 'accounts.json');
@@ -834,7 +853,10 @@ ipcMain.handle('discord:login', async () => {
 });
 ipcMain.handle('discord:logout', () => {
   if (settings.discordUser && settings.avatar === settings.discordUser.avatar) settings.avatar = null;
-  settings.discordUser = null; saveSettings(); return profileForUI();
+  settings.discordUser = null; saveSettings();
+  const s = cloud.session();
+  if (s && s.provider === 'discord') cloud.signOut();
+  return profileForUI();
 });
 ipcMain.handle('discord:loginhelp', () => shell.openExternal('https://discord.com/developers/applications'));
 // With Clipy Cloud set up, email accounts are real online accounts (Firebase Auth); otherwise local.
@@ -941,6 +963,91 @@ ipcMain.handle('external', (_e, which) => {
   if (urls[which]) shell.openExternal(urls[which]);
 });
 
+// ───────────────────────────────────────────── v1.0.4: Clipy Studio
+const studio = require('./studio')({
+  ffmpegPath: FFMPEG, ffmpeg, encoderArgs: () => encoderArgs(), pixFmt: () => pixFmt(encoder), fps: () => settings.fps,
+});
+async function addDerived(src, file, { title, duration, kind }) {
+  const id = newId();
+  const thumb = await makeThumb(file, id, Math.min(2, Math.max(0, duration / 3)));
+  const item = {
+    id, type: 'clip', file, thumb, game: src ? src.game : null, title, createdAt: Date.now(),
+    duration, favorite: false, size: fs.statSync(file).size, kind: kind || null,
+  };
+  library.unshift(item); saveLibrary(); pushLibrary();
+  return item;
+}
+ipcMain.handle('studio:montage', async (_e, ids, opts) => {
+  const clips = (ids || []).map((id) => library.find((c) => c.id === id)).filter((c) => c && c.type === 'clip' && fs.existsSync(c.file));
+  if (clips.length < 2) return { ok: false, error: 'Pick at least 2 clips' };
+  clips.forEach((c) => busy.add(c.id)); pushState();
+  try {
+    const dir = path.join(clipsDir(), 'Montages'); fs.mkdirSync(dir, { recursive: true });
+    const out = path.join(dir, `Montage_${stamp(new Date())}.mp4`);
+    const r = await studio.montage(clips.map((c) => c.file), out, opts || {});
+    const games = [...new Set(clips.map((c) => c.game).filter(Boolean))];
+    const item = await addDerived(games.length === 1 ? clips[0] : null, out, {
+      title: `Montage · ${games.length === 1 ? games[0] : `${clips.length} clips`}`, duration: r.duration, kind: 'montage',
+    });
+    toast({ kind: 'done', title: 'Montage ready', sub: `${clips.length} clips · ${Math.round(r.duration)}s` });
+    return { ok: true, id: item.id };
+  } catch (e) { return { ok: false, error: String(e.message).slice(0, 200) }; }
+  finally { clips.forEach((c) => busy.delete(c.id)); pushState(); }
+});
+ipcMain.handle('studio:export', async (_e, id, opts) => {
+  const c = library.find((x) => x.id === id);
+  if (!c || c.type !== 'clip') return { ok: false, error: 'Clip not found' };
+  setBusy(id, true);
+  try {
+    const o = opts || {};
+    const dir = path.join(clipsDir(), 'Exports'); fs.mkdirSync(dir, { recursive: true });
+    const tag = { vertical: '9x16', square: '1x1', original: 'edit' }[o.format] || 'edit';
+    const out = path.join(dir, `${path.basename(c.file, '.mp4')}_${tag}_${Date.now().toString(36)}.mp4`);
+    const r = await studio.socialExport(c.file, out, o);
+    const label = { vertical: 'Vertical', square: 'Square', original: 'Edit' }[o.format] || 'Edit';
+    const sp = Number(o.speed) || 1;
+    const item = await addDerived(c, out, { title: `${c.title} (${label}${sp !== 1 ? ` · ${sp}×` : ''})`, duration: r.duration, kind: o.format });
+    return { ok: true, id: item.id };
+  } catch (e) { return { ok: false, error: String(e.message).slice(0, 200) }; }
+  finally { setBusy(id, false); }
+});
+ipcMain.handle('studio:highlights', async (_e, id) => {
+  const c = library.find((x) => x.id === id);
+  if (!c || c.type !== 'clip') return { ok: false, error: 'Clip not found' };
+  try { return { ok: true, ...(await studio.highlights(c.file)) }; } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('clips:bulk', async (_e, action, ids) => {
+  const set = new Set(ids || []);
+  if (action === 'favorite' || action === 'unfavorite') {
+    library.forEach((c) => { if (set.has(c.id)) c.favorite = action === 'favorite'; });
+    saveLibrary(); return { ok: true };
+  }
+  if (action === 'delete') {
+    for (const c of library.filter((x) => set.has(x.id))) {
+      try { await shell.trashItem(c.file); } catch {}
+      if (c.thumb) fs.rm(c.thumb, { force: true }, () => {});
+    }
+    library = library.filter((c) => !set.has(c.id)); saveLibrary(); return { ok: true };
+  }
+  return { ok: false, error: 'Unknown action' };
+});
+
+// friend alerts: poll friends' activity and toast new clips
+let friendAlertSince = 0;
+async function pollFriendActivity() {
+  if (!settings.friendAlerts || !cloud.configured() || !cloud.session()) return;
+  try {
+    const o = await cloud.overview();
+    const fresh = o.friends.flatMap((f) => (f.activity || []).map((a) => ({ ...a, who: f.name }))).filter((a) => a.at > friendAlertSince);
+    if (friendAlertSince && fresh.length) {
+      const a = fresh.sort((x, y) => y.at - x.at)[0];
+      toast({ kind: 'friend', title: `${a.who} ${a.type === 'shot' ? 'took a screenshot' : 'saved a clip'}`, sub: a.game || a.title || '' });
+      if (mainWin && !mainWin.isDestroyed()) mainWin.webContents.send('friends-activity');
+    }
+    friendAlertSince = Math.max(Date.now() - 5000, ...fresh.map((a) => a.at), friendAlertSince);
+  } catch {}
+}
+
 // ───────────────────────────────────────────── toast overlay
 let toastTimer = null;
 function toast(msg) {
@@ -974,6 +1081,7 @@ function registerHotkeys() {
   };
   reg(settings.clipHotkey, () => saveClip(), 'clip');
   reg(settings.screenshotHotkey, () => takeScreenshot(), 'shot');
+  reg(settings.longClipHotkey, () => saveClip(settings.longClipLength), 'long');
 }
 function applyLoginItem() {
   if (!app.isPackaged) return;
@@ -1068,7 +1176,7 @@ ipcMain.handle('settings:set', (_e, patch) => {
   const before = { ...settings };
   settings = { ...settings, ...patch };
   saveSettings();
-  if (patch.clipHotkey !== undefined || patch.screenshotHotkey !== undefined) registerHotkeys();
+  if (patch.clipHotkey !== undefined || patch.screenshotHotkey !== undefined || patch.longClipHotkey !== undefined) registerHotkeys();
   if (patch.launchOnStartup !== undefined) applyLoginItem();
   if (CAPTURE_KEYS.some((k) => patch[k] !== undefined && patch[k] !== before[k])) startRecorder();
   if (patch.bufferEnabled !== undefined && patch.bufferEnabled !== before.bufferEnabled) startRecorder();
@@ -1087,7 +1195,7 @@ ipcMain.handle('displays', () => {
     primary: d.id === prim,
   }));
 });
-ipcMain.handle('clip:save', () => saveClip());
+ipcMain.handle('clip:save', (_e, len) => saveClip(len));
 ipcMain.handle('shot:take', () => takeScreenshot());
 ipcMain.handle('buffer:toggle', () => toggleBuffer());
 ipcMain.handle('clip:rename', (_e, id, title) => {
@@ -1167,6 +1275,8 @@ app.whenReady().then(async () => {
   setInterval(checkUpdate, 6 * 60 * 60 * 1000);
   cloudHeartbeat();
   setInterval(cloudHeartbeat, 60 * 1000);
+  pollFriendActivity();
+  setInterval(pollFriendActivity, 90 * 1000);
 
   if (TEST_DIR) runSelfTest();
 });
@@ -1209,6 +1319,27 @@ async function runSelfTest() {
     await shot('03b-share.png');
     const t = await trimClip(r1.id, 1, 5);
     log('trim', JSON.stringify(t));
+    // v1.0.4 studio checks
+    const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+    const longR = await saveClip(60);
+    log('long-clip', JSON.stringify(longR), longR.ok ? library.find((c) => c.id === longR.id).duration.toFixed(1) : '');
+    const ids = library.filter((c) => c.type === 'clip').slice(0, 2).map((c) => c.id);
+    await js(`closeModal();go('library')`); await wait(1500);
+    await js(`toggleSelect(${JSON.stringify(ids[0])});toggleSelect(${JSON.stringify(ids[1])})`); await wait(800);
+    await shot('07-selection.png');
+    log('montage', JSON.stringify(await js(`api.montage(${JSON.stringify(ids)}, { transition: 'fade' })`)));
+    await js('clearSelection()');
+    log('export', JSON.stringify(await js(`api.exportClip(${JSON.stringify(r1.id)}, { format: 'vertical', speed: 1 })`)));
+    log('highlights', JSON.stringify(await js(`api.highlights(${JSON.stringify(r1.id)})`)));
+    await js(`openPlayer(${JSON.stringify(r1.id)})`); await wait(2000);
+    await js(`document.querySelector('#pHigh').click()`); await wait(9000);
+    await shot('08-highlight.png');
+    await js(`exportDialog(lib.find((c) => c.id === ${JSON.stringify(r1.id)}), [0, 5])`); await wait(800);
+    await shot('09-export.png');
+    await js(`document.querySelectorAll('.dlg-wrap').forEach((x) => x.remove()); closeModal(); shortcutsDialog()`); await wait(600);
+    await shot('10-shortcuts.png');
+    await js(`document.querySelectorAll('.dlg-wrap').forEach((x) => x.remove()); go('library')`); await wait(1200);
+    await shot('11-library.png');
     const g = await makeGif(r1.id, 0, 3).catch((e) => ({ ok: false, error: e.message }));
     log('gif', JSON.stringify(g));
     log('discord-bad', JSON.stringify(await discordConnect('https://example.com/nope')));
@@ -1224,7 +1355,6 @@ async function runSelfTest() {
   log('acc-oldpw', JSON.stringify(await accountLogin({ email: 'test@example.com', password: 'clipy1234' })));
   log('acc-newpw', JSON.stringify(await accountLogin({ email: 'test@example.com', password: 'better5678' })));
   log('acc-stored', JSON.stringify(Object.keys(accounts[0])), 'plaintext-in-file:', fs.readFileSync(ACCOUNTS_FILE, 'utf8').includes('better5678'));
-  log('discord-login-unconfigured', JSON.stringify(await discordLogin()));
   if (cloud.configured()) {
     settings.accountId = null;
     const tmpEmail = `clipy-ui-${Date.now().toString(36)}@example.com`;
