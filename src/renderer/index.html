@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'self'; img-src 'self' file: data:; media-src 'self' file:; style-src 'self' 'unsafe-inline'; script-src 'self'">
+  <title>Clipy</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header id="titlebar">
+    <div class="tb-brand">
+      <svg class="mark" viewBox="0 0 100 100" aria-hidden="true">
+        <rect width="100" height="100" rx="24" fill="#fff"/>
+        <path d="M70.1 34.3 A25.5 25.5 0 1 0 70.1 65.7" fill="none" stroke="#000" stroke-width="10" stroke-linecap="round"/>
+        <circle cx="50" cy="50" r="8.5" fill="#000"/>
+      </svg>
+      <span>clipy</span>
+    </div>
+    <div class="tb-drag"></div>
+    <div class="tb-controls">
+      <button data-win="min" title="Minimize"><svg viewBox="0 0 12 12"><path d="M2 6h8"/></svg></button>
+      <button data-win="max" title="Maximize"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7"/></svg></button>
+      <button data-win="close" class="close" title="Close"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+    </div>
+  </header>
+
+  <div id="app">
+    <aside id="sidebar">
+      <nav>
+        <button class="nav-item active" data-view="library">
+          <svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M10 9.5v5l4.5-2.5z" class="fill"/></svg>
+          <span>Library</span><em id="navCount">0</em>
+        </button>
+        <button class="nav-item" data-view="settings">
+          <svg viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+          <span>Settings</span>
+        </button>
+      </nav>
+
+      <div class="side-spacer"></div>
+
+      <div id="statusCard" class="status">
+        <div class="status-top">
+          <span class="rec-dot"></span>
+          <span class="status-label" id="statusLabel">Starting…</span>
+        </div>
+        <div class="status-meter" id="meter">
+          <div class="meter-fill" id="meterFill"></div>
+        </div>
+        <div class="status-meta" id="statusMeta">—</div>
+        <div class="status-actions">
+          <button class="btn-clip" id="sideClip"><span>Clip</span><kbd id="sideKey">F8</kbd></button>
+          <button class="btn-icon" id="sideToggle" title="Pause replay">
+            <svg viewBox="0 0 24 24" id="toggleIcon"><path d="M9 6v12M15 6v12"/></svg>
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <main id="view"></main>
+  </div>
+
+  <div id="modal" class="modal hidden" role="dialog" aria-modal="true"></div>
+  <div id="snack" class="snack"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

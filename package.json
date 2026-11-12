@@ -1,0 +1,65 @@
+{
+  "name": "clipy",
+  "productName": "Clipy",
+  "version": "1.0.0",
+  "description": "Clipy – minimal black & white game clipping. Replay buffer, hotkey, done.",
+  "main": "src/main/main.js",
+  "author": "Clipy",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "icon": "node scripts/make-icon.js",
+    "dist": "node scripts/make-icon.js && electron-builder --win --x64 --publish never"
+  },
+  "dependencies": {
+    "ffmpeg-static": "^5.3.0"
+  },
+  "build": {
+    "appId": "app.clipy.desktop",
+    "productName": "Clipy",
+    "copyright": "MIT License",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**"
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Clipy",
+      "artifactName": "Clipy-Setup-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "Clipy-Portable-${version}.exe"
+    }
+  },
+  "devDependencies": {
+    "electron": "^45.3.1",
+    "electron-builder": "^26.18.0"
+  }
+}
