@@ -170,8 +170,9 @@ function renderChip() {
   const name = profile.name || 'Guest';
   $('#chipAvatar').outerHTML = avatarHTML('sm" id="chipAvatar');
   $('#chipName').textContent = name;
-  $('#chipSub').textContent = profile.google ? profile.google.email : profile.name ? 'Local profile' : 'Set up your profile';
-  const links = (profile.google ? 1 : 0) + (profile.discord ? 1 : 0);
+  $('#chipSub').textContent = profile.account ? profile.account.email : profile.google ? profile.google.email
+    : profile.discordUser ? `@${profile.discordUser.username}` : profile.name ? 'Local profile' : 'Set up your profile';
+  const links = (profile.account ? 1 : 0) + (profile.google ? 1 : 0) + (profile.discordUser || profile.discord ? 1 : 0);
   $('#navLinks').textContent = links ? `${links} linked` : '';
 }
 function renderStatus() {
@@ -791,6 +792,136 @@ async function signInGoogle(after) {
   if (after) after(); else if (view === 'profile') renderProfile();
 }
 
+function discordSetupDialog(after) {
+  dialog({
+    wide: true,
+    title: `${I.discord} Set up Discord sign-in`,
+    body: `
+      <p>Discord sign-in needs a free Discord application. One-time setup, about 3 minutes.</p>
+      <ol class="steps">
+        <li>Open the <a href="#" id="dHelp2">Discord Developer Portal</a> and click <b>New Application</b> (name it "Clipy").</li>
+        <li>Open <b>OAuth2</b> in the left menu. Under <b>Redirects</b> add exactly:<br><code class="copyable" id="dRedir" title="Click to copy">${esc(profile.discordRedirect)}</code> and press <b>Save Changes</b>.</li>
+        <li>On the same page copy the <b>Client ID</b>, then click <b>Reset Secret</b> and copy the <b>Client Secret</b>.</li>
+        <li>Paste both below.</li>
+      </ol>
+      <label class="field"><span>Client ID</span><input id="dcId" spellcheck="false" placeholder="123456789012345678" value="${esc(settings.discordClientId || '')}"></label>
+      <label class="field"><span>Client secret</span><input id="dcSecret" type="password" spellcheck="false" placeholder="••••••••" value="${esc(settings.discordClientSecret || '')}"></label>`,
+    actions: [
+      { label: 'Cancel' },
+      {
+        label: 'Save & sign in', primary: true, icon: I.discord, run: async (box) => {
+          const id = $('#dcId', box).value.trim();
+          const secret = $('#dcSecret', box).value.trim();
+          if (!/^\d{15,22}$/.test(id)) { snack('The client ID is a long number'); return true; }
+          if (secret.length < 20) { snack('Paste the client secret too'); return true; }
+          settings = await api.setSettings({ discordClientId: id, discordClientSecret: secret });
+          profile = await api.profile();
+          signInDiscord(after);
+        },
+      },
+    ],
+    onMount: (box) => {
+      $('#dHelp2', box).addEventListener('click', (e) => { e.preventDefault(); api.discordLoginHelp(); });
+      $('#dRedir', box).addEventListener('click', () => { navigator.clipboard.writeText(profile.discordRedirect).then(() => snack('Redirect URL copied')); });
+    },
+  });
+}
+async function signInDiscord(after) {
+  if (!profile.discordLoginConfigured) return discordSetupDialog(after);
+  snack('Continue in your browser…', { busy: true });
+  const r = await api.discordLogin();
+  if (r.needsSetup) { $('#snack').classList.remove('show'); return discordSetupDialog(after); }
+  profile = await api.profile();
+  settings = await api.getSettings();
+  renderChip();
+  snack(r.ok ? `Signed in as @${profile.discordUser.username}` : `Discord: ${r.error}`, { ms: 4000 });
+  if (after) after(); else if (view === 'profile') renderProfile();
+}
+
+function passwordDialog() {
+  dialog({
+    title: 'Change password',
+    body: `
+      <label class="field"><span>Current password</span><input id="pwOld" type="password" autocomplete="current-password"></label>
+      <label class="field"><span>New password</span><input id="pwNew" type="password" autocomplete="new-password" placeholder="8+ characters, letters & a number"></label>`,
+    actions: [
+      { label: 'Cancel' },
+      {
+        label: 'Save', primary: true, run: async (box) => {
+          const r = await api.accountPassword({ current: $('#pwOld', box).value, next: $('#pwNew', box).value });
+          snack(r.ok ? 'Password changed' : r.error);
+          return r.ok ? undefined : true;
+        },
+      },
+    ],
+    onMount: (box) => $('#pwOld', box).focus(),
+  });
+}
+
+function accountCardHTML(p) {
+  if (p.account) {
+    return `
+      <div class="conn linked">
+        <div class="conn-head">
+          <span class="conn-logo">${I.mail}</span>
+          <div><b>Clipy account</b><small>Signed in as <b>${esc(p.account.email)}</b></small></div>
+          <span class="conn-state">Signed in</span>
+        </div>
+        <div class="conn-body">
+          <div class="conn-row"><div><b>Member since</b><small>${new Date(p.account.created).toLocaleDateString('en-US', { dateStyle: 'long' })}</small></div></div>
+          <div class="conn-actions"><button class="btn" id="aPw">Change password</button><button class="btn" id="aOut">Sign out</button></div>
+        </div>
+      </div>`;
+  }
+  return `
+    <div class="conn">
+      <div class="conn-head">
+        <span class="conn-logo">${I.mail}</span>
+        <div><b>Clipy account</b><small>Sign in with your email and a password</small></div>
+        <span class="conn-state">Signed out</span>
+      </div>
+      <div class="conn-body">
+        <div class="tabs" id="aTabs"><button data-t="in" class="on">Sign in</button><button data-t="up">Create account</button></div>
+        <form class="auth-form" id="aForm" autocomplete="on">
+          <input id="aName" class="hidden" placeholder="Name" maxlength="32" autocomplete="nickname">
+          <input id="aEmail" type="email" placeholder="Email" autocomplete="email" spellcheck="false">
+          <input id="aPass" type="password" placeholder="Password" autocomplete="current-password">
+          <button class="btn primary" id="aSubmit" type="submit">Sign in${I.arrow}</button>
+        </form>
+        <small class="conn-help">Your account and password stay on this PC (encrypted with scrypt).</small>
+      </div>
+    </div>`;
+}
+function bindAccountCard() {
+  if ($('#aOut')) $('#aOut').addEventListener('click', async () => { profile = await api.accountLogout(); renderChip(); renderProfile(); snack('Signed out'); });
+  if ($('#aPw')) $('#aPw').addEventListener('click', passwordDialog);
+  if (!$('#aForm')) return;
+  let mode = 'in';
+  $('#aTabs').addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    mode = b.dataset.t;
+    $$('#aTabs button').forEach((x) => x.classList.toggle('on', x === b));
+    $('#aName').classList.toggle('hidden', mode !== 'up');
+    $('#aPass').placeholder = mode === 'up' ? 'Password (8+ characters, letters & a number)' : 'Password';
+    $('#aPass').autocomplete = mode === 'up' ? 'new-password' : 'current-password';
+    $('#aSubmit').innerHTML = `${mode === 'up' ? 'Create account' : 'Sign in'}${I.arrow}`;
+  });
+  $('#aForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const btn = $('#aSubmit');
+    btn.disabled = true;
+    const data = { email: $('#aEmail').value, password: $('#aPass').value, name: $('#aName').value };
+    const r = mode === 'up' ? await api.accountRegister(data) : await api.accountLogin(data);
+    btn.disabled = false;
+    if (!r.ok) { snack(r.error, { ms: 3500 }); return; }
+    settings = await api.getSettings();
+    profile = await api.profile();
+    renderChip();
+    renderProfile();
+    snack(mode === 'up' ? 'Account created — welcome!' : `Welcome back${profile.name ? `, ${profile.name}` : ''}`);
+  });
+}
+
 function profileStats() {
   const clips = lib.filter((c) => c.type === 'clip');
   const g = games().slice(0, 5);
@@ -832,7 +963,8 @@ async function renderProfile() {
     </section>
 
     <div class="section-title"><span class="num">01</span><h2>Connected accounts</h2></div>
-    <div class="connections">
+    <div class="connections three">
+      ${accountCardHTML(p)}
       <div class="conn ${p.google ? 'linked' : ''}">
         <div class="conn-head">
           <span class="conn-logo">${I.google}</span>
@@ -842,16 +974,21 @@ async function renderProfile() {
         <div class="conn-body">
           ${p.google
             ? `<button class="btn" id="gOut">Sign out</button>`
-            : `<button class="btn primary" id="gIn">${I.google}Sign in with Google</button>${p.googleConfigured ? '<button class="btn" id="gSetup">Edit client ID</button>' : ''}`}
+            : `<button class="btn primary" id="gIn">${I.google}Sign in with Google</button>${p.googleConfigured && !p.googleBundled ? '<button class="btn" id="gSetup">Edit client ID</button>' : ''}`}
         </div>
       </div>
-      <div class="conn ${p.discord ? 'linked' : ''}">
+      <div class="conn ${p.discord || p.discordUser ? 'linked' : ''}">
         <div class="conn-head">
           <span class="conn-logo">${I.discord}</span>
-          <div><b>Discord</b><small>${p.discord ? `Posting to <b>#${esc(p.discord.name)}</b>` : 'Send clips to any channel with one click'}</small></div>
-          <span class="conn-state">${p.discord ? 'Linked' : 'Not linked'}</span>
+          <div><b>Discord</b><small>${p.discordUser ? `Signed in as <b>@${esc(p.discordUser.username)}</b>` : 'Sign in and share clips to any channel'}</small></div>
+          <span class="conn-state">${p.discordUser ? 'Linked' : 'Not linked'}</span>
         </div>
         <div class="conn-body">
+          <div class="conn-sub">Account</div>
+          ${p.discordUser
+            ? `<div class="conn-actions" style="padding:0 0 4px"><button class="btn" id="dlOut">Sign out</button>${p.discordLoginConfigured && !p.discordBundled ? '<button class="btn ghost" id="dlSetup">Edit app</button>' : ''}</div>`
+            : `<div class="conn-actions" style="padding:0 0 4px"><button class="btn primary" id="dlIn">${I.discord}Sign in with Discord</button>${p.discordLoginConfigured && !p.discordBundled ? '<button class="btn ghost" id="dlSetup">Edit app</button>' : ''}</div>`}
+          <div class="conn-sub">Channel ${p.discord ? `<b>· #${esc(p.discord.name)}</b>` : ''}</div>
           ${p.discord ? `
             <div class="conn-row"><div><b>Auto-post new clips</b><small>Every saved clip goes straight to Discord</small></div><button class="switch ${settings.discordAutoPost ? 'on' : ''}" id="dAuto"></button></div>
             <div class="conn-row"><div><b>Upload limit</b><small>Bigger clips get compressed automatically</small></div>
@@ -903,6 +1040,10 @@ async function renderProfile() {
   nameIn.addEventListener('blur', saveName);
   nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') nameIn.blur(); });
 
+  bindAccountCard();
+  if ($('#dlIn')) $('#dlIn').addEventListener('click', () => signInDiscord());
+  if ($('#dlSetup')) $('#dlSetup').addEventListener('click', () => discordSetupDialog());
+  if ($('#dlOut')) $('#dlOut').addEventListener('click', async () => { profile = await api.discordLogout(); renderChip(); renderProfile(); snack('Signed out of Discord'); });
   if ($('#gIn')) $('#gIn').addEventListener('click', () => signInGoogle());
   if ($('#gSetup')) $('#gSetup').addEventListener('click', () => googleSetupDialog());
   if ($('#gOut')) $('#gOut').addEventListener('click', async () => { profile = await api.googleSignOut(); renderChip(); renderProfile(); snack('Signed out of Google'); });
@@ -944,9 +1085,13 @@ function onboarding() {
        <div class="onb-keys"><div class="k">${esc(settings.clipHotkey)}<small>save clip</small></div><div class="k">${esc(settings.screenshotHotkey)}<small>screenshot</small></div></div>`,
       `<div class="onb-art">${avatarHTML('xl')}</div>
        <h2>Make it yours</h2>
-       <p>Pick a name for your clips. You can also sign in with Google to use your account name and picture.</p>
+       <p>Pick a name for your clips, or sign in to use your account name and picture.</p>
        <input class="onb-input" id="oName" placeholder="Your name" maxlength="32" value="${esc(profile.name || '')}" spellcheck="false">
-       <button class="btn google-btn" id="oGoogle">${I.google}${profile.google ? `Signed in as ${esc(profile.google.email)}` : 'Sign in with Google'}</button>`,
+       <div class="onb-auth">
+         <button class="btn google-btn" id="oGoogle">${I.google}${profile.google ? 'Google linked' : 'Google'}</button>
+         <button class="btn google-btn" id="oDiscord">${I.discord}${profile.discordUser ? `@${esc(profile.discordUser.username)}` : 'Discord'}</button>
+         <button class="btn google-btn" id="oEmail">${I.mail}${profile.account ? 'Signed in' : 'Email'}</button>
+       </div>`,
       `<div class="onb-art"><span class="onb-icon">${I.discord}</span></div>
        <h2>Share instantly</h2>
        <p>Connect a Discord channel and send any clip there with one click. Big clips are compressed automatically to fit.</p>
@@ -971,6 +1116,13 @@ function onboarding() {
     if ($('#oBack')) $('#oBack').addEventListener('click', async () => { await saveName(); step--; render(); });
     if ($('#oSkip')) $('#oSkip').addEventListener('click', finish);
     if ($('#oGoogle') && !profile.google) $('#oGoogle').addEventListener('click', async () => { await saveName(); signInGoogle(() => render()); });
+    if ($('#oDiscord') && !profile.discordUser) $('#oDiscord').addEventListener('click', async () => { await saveName(); signInDiscord(() => render()); });
+    if ($('#oEmail') && !profile.account) $('#oEmail').addEventListener('click', async () => {
+      await saveName();
+      settings = await api.setSettings({ onboarded: true });
+      m.classList.remove('onb-wrap'); closeModal(); go('profile');
+      setTimeout(() => { const t = $('#aTabs button[data-t="up"]'); if (t) t.click(); const e = $('#aEmail'); if (e) e.focus(); }, 50);
+    });
     if ($('#oHookBtn')) $('#oHookBtn').addEventListener('click', async () => {
       const r = await api.discordConnect($('#oHook').value);
       if (r.ok) { profile = await api.profile(); renderChip(); render(); snack(`Connected to #${r.info.name}`); } else snack(r.error);

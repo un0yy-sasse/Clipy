@@ -55,6 +55,10 @@ const DEFAULTS = {
   google: null,
   googleClientId: '',
   googleClientSecret: '',
+  discordClientId: '',
+  discordClientSecret: '',
+  discordUser: null,
+  accountId: null,
   discordWebhook: '',
   discordInfo: null,
   discordAutoPost: false,
@@ -603,41 +607,63 @@ const AUTH_PAGE = (title, text) => `<!doctype html><meta charset="utf-8"><title>
 <div style="width:22px;height:22px;border-radius:50%;background:#000"></div></div>
 <h1 style="margin:0 0 8px;font-size:28px;letter-spacing:-.02em">${title}</h1><p style="color:#8a8a8a;margin:0">${text}</p></div></body>`;
 
-async function googleSignIn() {
-  const clientId = (settings.googleClientId || '').trim();
-  if (!clientId) return { ok: false, needsSetup: true };
-  const verifier = b64url(crypto.randomBytes(32));
-  const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
+// Sign-in apps baked into the build (oauth.json is git-ignored, so the secrets never land on GitHub).
+// Desktop OAuth secrets can't be truly secret anyway (Google: "installed apps"), but we keep them out of the repo.
+const BUNDLED = readJSON(path.join(ROOT, 'oauth.json'), {});
+// Built-in keys always win and cannot be overridden from the app.
+const cred = (key) => String(BUNDLED[key] || settings[key] || '').trim();
+const bundledHas = (k) => !!String(BUNDLED[k] || '').trim();
+
+// Opens the provider's sign-in page in the browser and waits for the redirect on a local port.
+async function loopbackAuth({ port = 0, pathName = '/', authUrl }) {
   const state = b64url(crypto.randomBytes(16));
   const server = http.createServer();
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  const redirect = `http://127.0.0.1:${server.address().port}`;
+  await new Promise((resolve, reject) => {
+    server.once('error', (e) => reject(e.code === 'EADDRINUSE' ? new Error(`Port ${port} is busy – close other sign-ins and try again`) : e));
+    server.listen(port, '127.0.0.1', resolve);
+  });
+  const redirect = `http://127.0.0.1:${server.address().port}${pathName}`;
   const codeP = new Promise((resolve, reject) => {
     const t = setTimeout(() => reject(new Error('Sign-in timed out')), 5 * 60 * 1000);
     server.on('request', (req, res) => {
       const u = new URL(req.url, redirect);
-      if (u.pathname !== '/') { res.writeHead(404); return res.end(); }
+      if (u.pathname !== pathName) { res.writeHead(404); return res.end(); }
       const err = u.searchParams.get('error');
       const ok = !err && u.searchParams.get('state') === state && u.searchParams.get('code');
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
       res.end(ok ? AUTH_PAGE('You\'re signed in.', 'You can close this tab and go back to Clipy.') : AUTH_PAGE('Sign-in cancelled', 'Head back to Clipy and try again.'));
       clearTimeout(t);
-      ok ? resolve(u.searchParams.get('code')) : reject(new Error(err || 'Sign-in failed'));
+      ok ? resolve(u.searchParams.get('code')) : reject(new Error(u.searchParams.get('error_description') || err || 'Sign-in failed'));
     });
   });
-  const auth = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-  auth.search = new URLSearchParams({
-    client_id: clientId, redirect_uri: redirect, response_type: 'code', scope: 'openid email profile',
-    code_challenge: challenge, code_challenge_method: 'S256', state, prompt: 'select_account',
-  }).toString();
-  shell.openExternal(auth.toString());
-  let code;
-  try { code = await codeP; } finally { server.close(); }
+  shell.openExternal(authUrl(redirect, state));
+  try { return { code: await codeP, redirect }; } finally { server.close(); }
+}
+async function downloadTo(url, file) {
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return null;
+    fs.writeFileSync(file, Buffer.from(await r.arrayBuffer()));
+    return file;
+  } catch { return null; }
+}
+
+async function googleSignIn() {
+  const clientId = cred('googleClientId');
+  if (!clientId) return { ok: false, needsSetup: true };
+  const verifier = b64url(crypto.randomBytes(32));
+  const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
+  const { code, redirect } = await loopbackAuth({
+    authUrl: (redirectUri, state) => 'https://accounts.google.com/o/oauth2/v2/auth?' + new URLSearchParams({
+      client_id: clientId, redirect_uri: redirectUri, response_type: 'code', scope: 'openid email profile',
+      code_challenge: challenge, code_challenge_method: 'S256', state, prompt: 'select_account',
+    }),
+  });
   const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
-      code, client_id: clientId, client_secret: (settings.googleClientSecret || '').trim(),
+      code, client_id: clientId, client_secret: cred('googleClientSecret'),
       redirect_uri: redirect, grant_type: 'authorization_code', code_verifier: verifier,
     }),
   });
@@ -658,6 +684,93 @@ async function googleSignIn() {
   if (!settings.avatar && picture) settings.avatar = picture;
   saveSettings();
   showMain();
+  return { ok: true };
+}
+
+// ── Discord sign-in (OAuth 2.0, scope "identify"). Discord needs an exact redirect URI → fixed port.
+const DISCORD_PORT = 53682;
+const DISCORD_REDIRECT = `http://127.0.0.1:${DISCORD_PORT}/callback`;
+async function discordLogin() {
+  const clientId = cred('discordClientId');
+  const secret = cred('discordClientSecret');
+  if (!clientId || !secret) return { ok: false, needsSetup: true };
+  const { code, redirect } = await loopbackAuth({
+    port: DISCORD_PORT, pathName: '/callback',
+    authUrl: (redirectUri, state) => 'https://discord.com/oauth2/authorize?' + new URLSearchParams({
+      client_id: clientId, response_type: 'code', redirect_uri: redirectUri, scope: 'identify', state, prompt: 'consent',
+    }),
+  });
+  const tokenRes = await fetch('https://discord.com/api/oauth2/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ grant_type: 'authorization_code', code, redirect_uri: redirect, client_id: clientId, client_secret: secret }),
+  });
+  const tok = await tokenRes.json();
+  if (!tokenRes.ok || !tok.access_token) throw new Error(tok.error_description || tok.error || 'Token exchange failed');
+  const meRes = await fetch('https://discord.com/api/users/@me', { headers: { Authorization: `Bearer ${tok.access_token}` } });
+  const me = await meRes.json();
+  if (!meRes.ok || !me.id) throw new Error(me.message || 'Could not read your Discord profile');
+  const avatar = me.avatar ? await downloadTo(`https://cdn.discordapp.com/avatars/${me.id}/${me.avatar}.png?size=256`, path.join(USER, 'avatar-discord.png')) : null;
+  settings.discordUser = { id: me.id, username: me.username, name: me.global_name || me.username, avatar, since: Date.now() };
+  if (!settings.profileName) settings.profileName = settings.discordUser.name;
+  if (!settings.avatar && avatar) settings.avatar = avatar;
+  saveSettings();
+  showMain();
+  return { ok: true };
+}
+
+// ── Clipy accounts (email + password, stored only on this PC; passwords are scrypt-hashed, never saved in plain text)
+const ACCOUNTS_FILE = path.join(USER, 'accounts.json');
+let accounts = readJSON(ACCOUNTS_FILE, []);
+const saveAccounts = () => writeJSON(ACCOUNTS_FILE, accounts);
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+const scryptP = (pw, salt) => new Promise((res, rej) => crypto.scrypt(pw, salt, 64, { N: 16384, r: 8, p: 1 }, (e, k) => (e ? rej(e) : res(k))));
+const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+function currentAccount() { return accounts.find((a) => a.id === settings.accountId) || null; }
+function checkPassword(pw) {
+  if (typeof pw !== 'string' || pw.length < 8) return 'Password needs at least 8 characters';
+  if (!/[a-zA-Z]/.test(pw) || !/\d/.test(pw)) return 'Use letters and at least one number';
+  return null;
+}
+async function accountRegister({ email, password, name }) {
+  email = String(email || '').trim().toLowerCase();
+  if (!EMAIL_RE.test(email)) return { ok: false, error: 'Enter a valid email address' };
+  const bad = checkPassword(password);
+  if (bad) return { ok: false, error: bad };
+  if (accounts.some((a) => a.email === email)) return { ok: false, error: 'An account with this email already exists – sign in instead' };
+  const salt = crypto.randomBytes(16);
+  const hash = await scryptP(password, salt);
+  const acc = { id: newId(), email, name: String(name || '').trim().slice(0, 32), salt: salt.toString('hex'), hash: hash.toString('hex'), created: Date.now() };
+  accounts.push(acc); saveAccounts();
+  settings.accountId = acc.id;
+  if (acc.name && !settings.profileName) settings.profileName = acc.name;
+  saveSettings();
+  return { ok: true };
+}
+async function accountLogin({ email, password }) {
+  email = String(email || '').trim().toLowerCase();
+  const acc = accounts.find((a) => a.email === email);
+  const hash = await scryptP(String(password || ''), acc ? Buffer.from(acc.salt, 'hex') : crypto.randomBytes(16));
+  if (!acc || !crypto.timingSafeEqual(hash, Buffer.from(acc.hash, 'hex'))) {
+    await pause(600); // slow down guessing
+    return { ok: false, error: 'Wrong email or password' };
+  }
+  settings.accountId = acc.id;
+  if (acc.name && !settings.profileName) settings.profileName = acc.name;
+  saveSettings();
+  return { ok: true };
+}
+async function accountChangePassword({ current, next }) {
+  const acc = currentAccount();
+  if (!acc) return { ok: false, error: 'Not signed in' };
+  const hash = await scryptP(String(current || ''), Buffer.from(acc.salt, 'hex'));
+  if (!crypto.timingSafeEqual(hash, Buffer.from(acc.hash, 'hex'))) { await pause(600); return { ok: false, error: 'Current password is wrong' }; }
+  const bad = checkPassword(next);
+  if (bad) return { ok: false, error: bad };
+  const salt = crypto.randomBytes(16);
+  acc.salt = salt.toString('hex');
+  acc.hash = (await scryptP(next, salt)).toString('hex');
+  saveAccounts();
   return { ok: true };
 }
 
@@ -684,10 +797,29 @@ function profileForUI() {
     name: settings.profileName,
     avatarUrl: settings.avatar && fs.existsSync(settings.avatar) ? fileUrl(settings.avatar) + `?v=${fs.statSync(settings.avatar).mtimeMs}` : null,
     google: settings.google ? { name: settings.google.name, email: settings.google.email } : null,
-    googleConfigured: !!(settings.googleClientId || '').trim(),
+    googleConfigured: !!cred('googleClientId'),
+    googleBundled: bundledHas('googleClientId'),
     discord: settings.discordWebhook ? settings.discordInfo || { name: 'Webhook' } : null,
+    discordUser: settings.discordUser ? { name: settings.discordUser.name, username: settings.discordUser.username } : null,
+    discordLoginConfigured: !!(cred('discordClientId') && cred('discordClientSecret')),
+    discordBundled: bundledHas('discordClientId'),
+    discordRedirect: DISCORD_REDIRECT,
+    account: (() => { const a = currentAccount(); return a ? { email: a.email, name: a.name, created: a.created } : null; })(),
+    accountsOnDevice: accounts.length,
   };
 }
+ipcMain.handle('discord:login', async () => {
+  try { return await discordLogin(); } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('discord:logout', () => {
+  if (settings.discordUser && settings.avatar === settings.discordUser.avatar) settings.avatar = null;
+  settings.discordUser = null; saveSettings(); return profileForUI();
+});
+ipcMain.handle('discord:loginhelp', () => shell.openExternal('https://discord.com/developers/applications'));
+ipcMain.handle('account:register', (_e, d) => accountRegister(d || {}));
+ipcMain.handle('account:login', (_e, d) => accountLogin(d || {}));
+ipcMain.handle('account:logout', () => { settings.accountId = null; saveSettings(); return profileForUI(); });
+ipcMain.handle('account:password', (_e, d) => accountChangePassword(d || {}));
 
 ipcMain.handle('profile', () => profileForUI());
 ipcMain.handle('avatar:choose', async () => {
@@ -973,15 +1105,16 @@ async function runSelfTest() {
     const img = await mainWin.webContents.capturePage();
     fs.writeFileSync(path.join(TEST_DIR, name), img.toPNG());
   };
+  const js = (code) => mainWin.webContents.executeJavaScript(code).catch((e) => log('js-error', e.message));
   log('encoder', encoder, 'ffmpeg', FFMPEG);
   await new Promise((r) => setTimeout(r, 14000));
   log('state', JSON.stringify(publicState()));
   await shot('00-onboarding.png');
-  await mainWin.webContents.executeJavaScript(`document.querySelector('#oNext').click()`);
+  await js(`document.querySelector('#oNext').click()`);
   await new Promise((r) => setTimeout(r, 600));
   await shot('00b-onboarding.png');
   settings.profileName = 'Tester'; settings.onboarded = true; saveSettings();
-  await mainWin.webContents.executeJavaScript(`(async()=>{settings=await api.getSettings();profile=await api.profile();renderChip();closeModal();go('library')})()`);
+  await js(`(async()=>{settings=await api.getSettings();profile=await api.profile();renderChip();closeModal();go('library')})()`);
   await new Promise((r) => setTimeout(r, 800));
   await shot('01-empty.png');
   const r1 = await saveClip();
@@ -992,10 +1125,10 @@ async function runSelfTest() {
   await new Promise((r) => setTimeout(r, 2500));
   await shot('02-library.png');
   if (r1.ok) {
-    mainWin.webContents.executeJavaScript(`openPlayer(${JSON.stringify(r1.id)})`);
+    js(`openPlayer(${JSON.stringify(r1.id)})`);
     await new Promise((r) => setTimeout(r, 2500));
     await shot('03-player.png');
-    await mainWin.webContents.executeJavaScript(`document.querySelector('#pShare').click()`);
+    await js(`document.querySelector('#pShare').click()`);
     await new Promise((r) => setTimeout(r, 500));
     await shot('03b-share.png');
     const t = await trimClip(r1.id, 1, 5);
@@ -1003,17 +1136,26 @@ async function runSelfTest() {
     const g = await makeGif(r1.id, 0, 3).catch((e) => ({ ok: false, error: e.message }));
     log('gif', JSON.stringify(g));
     log('discord-bad', JSON.stringify(await discordConnect('https://example.com/nope')));
-    const big = library.find((c) => c.id === r1.id);
-    const cmp = await compressForLimit(big, 200000).then((f) => ({ ok: true, size: fs.statSync(f).size })).catch((e) => ({ ok: false, error: e.message }));
-    log('compress', JSON.stringify(cmp));
   }
-  mainWin.webContents.executeJavaScript(`closeMenu();closeModal();go('library')`);
+  log('acc-weak', JSON.stringify(await accountRegister({ email: 'test@example.com', password: 'short', name: 'Tester' })));
+  log('acc-register', JSON.stringify(await accountRegister({ email: 'Test@Example.com', password: 'clipy1234', name: 'Tester' })));
+  log('acc-dupe', JSON.stringify(await accountRegister({ email: 'test@example.com', password: 'clipy1234' })));
+  settings.accountId = null;
+  log('acc-wrongpw', JSON.stringify(await accountLogin({ email: 'test@example.com', password: 'nope12345' })));
+  log('acc-login', JSON.stringify(await accountLogin({ email: 'TEST@example.com', password: 'clipy1234' })));
+  log('acc-chpw', JSON.stringify(await accountChangePassword({ current: 'clipy1234', next: 'better5678' })));
+  settings.accountId = null;
+  log('acc-oldpw', JSON.stringify(await accountLogin({ email: 'test@example.com', password: 'clipy1234' })));
+  log('acc-newpw', JSON.stringify(await accountLogin({ email: 'test@example.com', password: 'better5678' })));
+  log('acc-stored', JSON.stringify(Object.keys(accounts[0])), 'plaintext-in-file:', fs.readFileSync(ACCOUNTS_FILE, 'utf8').includes('better5678'));
+  log('discord-login-unconfigured', JSON.stringify(await discordLogin()));
+  js(`closeMenu();closeModal();go('library')`);
   await new Promise((r) => setTimeout(r, 1500));
   await shot('02b-library.png');
-  mainWin.webContents.executeJavaScript(`go('profile')`);
+  js(`go('profile')`);
   await new Promise((r) => setTimeout(r, 1500));
   await shot('05-profile.png');
-  mainWin.webContents.executeJavaScript(`go('settings')`);
+  js(`go('settings')`);
   await new Promise((r) => setTimeout(r, 1500));
   await shot('04-settings.png');
   log('library', JSON.stringify(library.map((c) => ({ t: c.type, d: c.duration, s: c.size, title: c.title }))));

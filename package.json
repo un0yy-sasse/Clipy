@@ -1,7 +1,7 @@
 {
   "name": "clipy",
   "productName": "Clipy",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Clipy – minimal black & white game clipping. Replay buffer, hotkey, done.",
   "main": "src/main/main.js",
   "author": "Clipy",
@@ -25,7 +25,8 @@
     "files": [
       "src/**/*",
       "assets/**/*",
-      "package.json"
+      "package.json",
+      "oauth.json"
     ],
     "asarUnpack": [
       "node_modules/ffmpeg-static/**"
