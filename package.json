@@ -1,7 +1,7 @@
 {
   "name": "clipy",
   "productName": "Clipy",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Clipy – minimal black & white game clipping. Replay buffer, hotkey, done.",
   "main": "src/main/main.js",
   "author": "Clipy",

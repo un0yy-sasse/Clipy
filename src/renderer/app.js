@@ -1,5 +1,5 @@
 'use strict';
-/* Clipy UI */
+/* Clipy UI · v1.0.1 */
 const api = window.clipy;
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -19,19 +19,32 @@ const I = {
   ext: '<svg viewBox="0 0 24 24"><path d="M14 4h6v6M20 4l-9 9M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></svg>',
   search: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4.2-4.2"/></svg>',
   x: '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>',
-  drag: '<svg viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3"/></svg>',
   full: '<svg viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>',
   vol: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" class="fill"/><path d="M16.5 8.5a5 5 0 0 1 0 7M19 6a8.5 8.5 0 0 1 0 12"/></svg>',
   mute: '<svg viewBox="0 0 24 24"><path d="M4 9h4l5-4v14l-5-4H4z" class="fill"/><path d="M17 9.5l5 5M22 9.5l-5 5"/></svg>',
   pauseLine: '<svg viewBox="0 0 24 24"><path d="M9 6v12M15 6v12"/></svg>',
   playLine: '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z" class="fill"/></svg>',
+  discord: '<svg viewBox="0 0 24 24"><path d="M7.5 7.2c1.4-.6 2.9-.9 4.5-.9s3.1.3 4.5.9c1.5 2.2 2.2 4.6 2 7.3-1.3 1-2.6 1.6-4 2l-.9-1.5M9.4 15l-.9 1.5c-1.4-.4-2.7-1-4-2-.2-2.7.5-5.1 2-7.3"/><circle cx="9.6" cy="12" r="1.1" class="fill"/><circle cx="14.4" cy="12" r="1.1" class="fill"/></svg>',
+  google: '<svg viewBox="0 0 24 24"><path d="M20.5 12.2c0-.7-.1-1.3-.2-1.9H12v3.6h4.8a4.6 4.6 0 0 1-2 2.9v2.4h3.2c1.6-1.6 2.5-3.9 2.5-7z" class="fill"/><path d="M12 21c2.6 0 4.7-.9 6.3-2.3l-3.2-2.4c-.8.6-1.9 1-3.1 1-2.4 0-4.5-1.6-5.2-3.8H3.5v2.5A9 9 0 0 0 12 21z" class="fill"/><path d="M6.8 13.5a5.4 5.4 0 0 1 0-3.4V7.6H3.5a9 9 0 0 0 0 8.4z" class="fill"/><path d="M12 6.6c1.4 0 2.6.5 3.6 1.4l2.7-2.7A9 9 0 0 0 3.5 7.6l3.3 2.5C7.5 8.1 9.6 6.6 12 6.6z" class="fill"/></svg>',
+  mail: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3.5 6.5l8.5 6.5 8.5-6.5"/></svg>',
+  copy: '<svg viewBox="0 0 24 24"><rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5a1 1 0 0 0-1-1H5a1 1 0 0 0-1 1v10a1 1 0 0 0 1 1h3"/></svg>',
+  gif: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 10H8.5a1.5 1.5 0 0 0 0 3v0a1.5 1.5 0 0 0 1.5-1.5M12.5 9.5v5M15 14.5v-5h2.5M15 12h2"/></svg>',
+  share: '<svg viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5L12 4l4.5 4.5M5 13v6a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-6"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+  user: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.2-3.6 4-5.4 7.5-5.4s6.3 1.8 7.5 5.4"/></svg>',
+  camera: '<svg viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>',
+  github: '<svg viewBox="0 0 24 24"><path class="fill" d="M12 2.5a9.5 9.5 0 0 0-3 18.5c.5.1.7-.2.7-.5v-1.7c-2.7.6-3.2-1.2-3.2-1.2-.4-1.1-1.1-1.4-1.1-1.4-.9-.6.1-.6.1-.6 1 .1 1.5 1 1.5 1 .9 1.5 2.3 1.1 2.9.8.1-.6.3-1.1.6-1.3-2.1-.2-4.4-1.1-4.4-4.7 0-1 .4-1.9 1-2.6-.1-.2-.4-1.2.1-2.5 0 0 .8-.3 2.6 1a9 9 0 0 1 4.8 0c1.8-1.3 2.6-1 2.6-1 .5 1.3.2 2.3.1 2.5.6.7 1 1.6 1 2.6 0 3.7-2.3 4.5-4.4 4.7.3.3.6.9.6 1.8v2.6c0 .3.2.6.7.5A9.5 9.5 0 0 0 12 2.5z"/></svg>',
+  link: '<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>',
+  arrow: '<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  dots: '<svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.6" class="fill"/><circle cx="12" cy="12" r="1.6" class="fill"/><circle cx="19" cy="12" r="1.6" class="fill"/></svg>',
 };
 
 let state = {};
 let settings = {};
+let profile = {};
 let lib = [];
 let view = 'library';
-const ui = { filter: 'all', q: '', sort: 'new' };
+const ui = { filter: 'all', q: '', sort: 'new', game: '' };
 let bufferSince = null;
 
 // ───────────────────────────── format helpers
@@ -48,6 +61,14 @@ function fmtSize(b) {
   return (b / 1e6).toFixed(b > 1e8 ? 0 : 1) + ' MB';
 }
 function fmtTime(ts) { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; }
+function ago(ts) {
+  const s = (Date.now() - ts) / 1000;
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s / 60)} min ago`;
+  if (s < 86400) return `${Math.floor(s / 3600)} h ago`;
+  const d = Math.floor(s / 86400);
+  return d === 1 ? 'yesterday' : `${d} days ago`;
+}
 function dayKey(ts) { const d = new Date(ts); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }
 function dayLabel(ts) {
   const d = new Date(ts), now = new Date();
@@ -55,20 +76,104 @@ function dayLabel(ts) {
   const diff = Math.round((start(now) - start(d)) / 864e5);
   if (diff === 0) return 'Today';
   if (diff === 1) return 'Yesterday';
-  return d.toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long', ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) });
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', ...(d.getFullYear() !== now.getFullYear() ? { year: 'numeric' } : {}) });
 }
 const ENCODERS = { h264_nvenc: 'NVIDIA NVENC', h264_amf: 'AMD AMF', h264_qsv: 'Intel Quick Sync', libx264: 'CPU · x264' };
-
-let snackT = null;
-function snack(text) {
-  const s = $('#snack');
-  s.textContent = text;
-  s.classList.add('show');
-  clearTimeout(snackT);
-  snackT = setTimeout(() => s.classList.remove('show'), 2200);
+function greeting() {
+  const h = new Date().getHours();
+  return h < 5 ? 'Late night session' : h < 12 ? 'Good morning' : h < 18 ? 'Good afternoon' : 'Good evening';
+}
+function initials(name) {
+  const p = String(name || '').trim().split(/\s+/).filter(Boolean);
+  return p.length ? (p[0][0] + (p[1] ? p[1][0] : '')).toUpperCase() : '';
+}
+function avatarHTML(cls = '') {
+  if (profile.avatarUrl) return `<span class="avatar ${cls}"><img src="${esc(profile.avatarUrl)}" alt=""></span>`;
+  const ini = initials(profile.name);
+  return `<span class="avatar ${cls}">${ini ? esc(ini) : I.user}</span>`;
 }
 
-// ───────────────────────────── sidebar status
+// ───────────────────────────── snack
+let snackT = null;
+function snack(text, { busy = false, ms = 2600 } = {}) {
+  const s = $('#snack');
+  s.innerHTML = `${busy ? '<span class="spinner"></span>' : ''}<span>${esc(text)}</span>`;
+  s.classList.add('show');
+  clearTimeout(snackT);
+  if (!busy) snackT = setTimeout(() => s.classList.remove('show'), ms);
+}
+
+// ───────────────────────────── share actions
+async function shareDiscord(c) {
+  if (!profile.discord) { snack('Connect Discord in your profile first'); go('profile'); return; }
+  snack(c.size > (settings.discordLimitMB || 10) * 1e6 ? 'Compressing & uploading to Discord…' : 'Uploading to Discord…', { busy: true });
+  const r = await api.discordSend(c.id);
+  snack(r.ok ? `Sent to #${profile.discord.name}` : `Discord: ${r.error}`, { ms: 3500 });
+}
+async function copyClip(c) {
+  snack('Copying…', { busy: true });
+  const ok = await api.copy(c.id);
+  snack(ok ? 'Copied — paste it anywhere with Ctrl+V' : 'Could not copy the file');
+}
+async function gmailClip(c) {
+  snack('Opening Gmail…', { busy: true });
+  await api.gmail(c.id);
+  snack('Gmail opened — the file is on your clipboard, press Ctrl+V or attach it', { ms: 4500 });
+}
+async function gifClip(c, a, b) {
+  snack('Rendering GIF…', { busy: true });
+  const r = await api.gif(c.id, a, b);
+  if (r && r.ok) { snack(`GIF ready (${fmtSize(r.size)}) and copied to clipboard`, { ms: 3500 }); api.revealFile(r.file); }
+  else snack(`GIF failed: ${r ? r.error : ''}`);
+}
+
+let menuEl = null;
+function closeMenu() { if (menuEl) { menuEl.remove(); menuEl = null; } }
+function openMenu(anchor, items) {
+  closeMenu();
+  menuEl = el(`<div class="menu">${items.map((it, i) => it === '-' ? '<div class="menu-sep"></div>' :
+    `<button data-i="${i}" ${it.disabled ? 'disabled' : ''}>${it.icon || ''}<span>${esc(it.label)}</span>${it.hint ? `<em>${esc(it.hint)}</em>` : ''}</button>`).join('')}</div>`);
+  document.body.appendChild(menuEl);
+  const r = anchor.getBoundingClientRect();
+  const mw = menuEl.offsetWidth, mh = menuEl.offsetHeight;
+  let left = Math.min(r.left, window.innerWidth - mw - 12);
+  let top = r.bottom + 8;
+  if (top + mh > window.innerHeight - 12) top = r.top - mh - 8;
+  menuEl.style.left = `${Math.max(12, left)}px`;
+  menuEl.style.top = `${top}px`;
+  menuEl.addEventListener('click', (e) => {
+    const b = e.target.closest('button[data-i]');
+    if (!b) return;
+    const it = items[Number(b.dataset.i)];
+    closeMenu();
+    it.run();
+  });
+  setTimeout(() => document.addEventListener('pointerdown', function off(e) {
+    if (menuEl && !menuEl.contains(e.target)) { closeMenu(); document.removeEventListener('pointerdown', off); }
+  }), 0);
+}
+function shareItems(c, getRange) {
+  const isClip = c.type === 'clip';
+  return [
+    { icon: I.discord, label: profile.discord ? `Send to #${profile.discord.name}` : 'Send to Discord', hint: profile.discord ? '' : 'connect', run: () => shareDiscord(c) },
+    { icon: I.copy, label: 'Copy file', hint: 'Ctrl+C', run: () => copyClip(c) },
+    { icon: I.mail, label: 'Email with Gmail', run: () => gmailClip(c) },
+    ...(isClip ? [{ icon: I.gif, label: 'Export as GIF', hint: '≤ 15s', run: () => { const r = getRange ? getRange() : [0, c.duration]; gifClip(c, r[0], r[1]); } }] : []),
+    '-',
+    { icon: I.folder, label: 'Show in folder', run: () => api.reveal(c.id) },
+    { icon: I.ext, label: 'Open externally', run: () => api.open(c.id) },
+  ];
+}
+
+// ───────────────────────────── sidebar
+function renderChip() {
+  const name = profile.name || 'Guest';
+  $('#chipAvatar').outerHTML = avatarHTML('sm" id="chipAvatar');
+  $('#chipName').textContent = name;
+  $('#chipSub').textContent = profile.google ? profile.google.email : profile.name ? 'Local profile' : 'Set up your profile';
+  const links = (profile.google ? 1 : 0) + (profile.discord ? 1 : 0);
+  $('#navLinks').textContent = links ? `${links} linked` : '';
+}
 function renderStatus() {
   const card = $('#statusCard');
   const on = !!state.recording;
@@ -84,11 +189,15 @@ function renderStatus() {
   clipBtn.firstElementChild.textContent = state.saving ? 'Saving…' : 'Clip';
   $('#sideToggle').innerHTML = settings.bufferEnabled ? I.pauseLine : I.playLine;
   $('#sideToggle').title = settings.bufferEnabled ? 'Pause replay' : 'Start replay';
+  const ub = $('#updateBadge');
+  ub.classList.toggle('hidden', !state.update);
+  if (state.update) $('#updateVer').textContent = `v${state.update.version} · click to download`;
   tickMeter();
   const hb = $('#heroClip');
   if (hb) hb.disabled = !on || state.saving;
   const hs = $('#heroShot');
   if (hs) hs.disabled = !on;
+  $$('.card').forEach((n) => n.classList.toggle('busy', (state.busy || []).includes(n.dataset.id)));
 }
 function tickMeter() {
   const len = settings.clipLength || 30;
@@ -109,19 +218,28 @@ setInterval(tickMeter, 1000);
 function go(v) {
   view = v;
   $$('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.view === v));
+  $('#profileChip').classList.toggle('active', v === 'profile');
   closeModal();
+  closeMenu();
   if (v === 'library') renderLibrary();
+  else if (v === 'profile') renderProfile();
   else renderSettings();
   $('#view').scrollTop = 0;
 }
 
 // ───────────────────────────── library
+function games() {
+  const m = new Map();
+  lib.forEach((c) => { if (c.game) m.set(c.game, (m.get(c.game) || 0) + 1); });
+  return [...m.entries()].sort((a, b) => b[1] - a[1]);
+}
 function filtered() {
   const q = ui.q.trim().toLowerCase();
-  let list = lib.filter((c) => {
+  const list = lib.filter((c) => {
     if (ui.filter === 'clip' && c.type !== 'clip') return false;
     if (ui.filter === 'shot' && c.type !== 'shot') return false;
     if (ui.filter === 'fav' && !c.favorite) return false;
+    if (ui.game && c.game !== ui.game) return false;
     if (q && !(`${c.title} ${c.game || ''}`.toLowerCase().includes(q))) return false;
     return true;
   });
@@ -139,12 +257,15 @@ function renderLibrary() {
   const shots = lib.filter((c) => c.type === 'shot');
   const dur = clips.reduce((a, c) => a + (c.duration || 0), 0);
   const size = lib.reduce((a, c) => a + (c.size || 0), 0);
-  const chip = (k, label, n) => `<button class="chip ${ui.filter === k ? 'active' : ''}" data-filter="${k}">${label}${n != null ? ` <span style="opacity:.5">${n}</span>` : ''}</button>`;
+  const today = clips.filter((c) => dayKey(c.createdAt) === dayKey(Date.now())).length;
+  const gl = games();
+  const chip = (k, label, n) => `<button class="chip ${ui.filter === k ? 'active' : ''}" data-filter="${k}">${label}${n != null ? ` <span>${n}</span>` : ''}</button>`;
+  const latest = [...clips].sort((a, b) => b.createdAt - a.createdAt)[0];
   $('#view').innerHTML = `
   <div class="page">
     <section class="hero">
       <div>
-        <div class="eyebrow">Library</div>
+        <div class="eyebrow">${esc(greeting())}${profile.name ? `, ${esc(profile.name)}` : ''}</div>
         <h1>Your moments<span class="ghost">.</span></h1>
       </div>
       <div class="hero-actions">
@@ -153,17 +274,19 @@ function renderLibrary() {
         <button class="btn primary" id="heroClip">${I.rec}Save clip <kbd>${esc(settings.clipHotkey || '—')}</kbd></button>
       </div>
     </section>
+    ${latest ? featureHTML(latest) : ''}
     <div class="stats">
-      <div class="stat"><b>${clips.length}</b><span>Clips</span></div>
+      <div class="stat"><b>${clips.length}</b><span>Clips</span><i>${today ? `+${today} today` : ''}</i></div>
       <div class="stat"><b>${shots.length}</b><span>Screenshots</span></div>
       <div class="stat"><b>${fmtDur(dur)}</b><span>Total length</span></div>
-      <div class="stat"><b>${fmtSize(size)}</b><span>Storage</span></div>
+      <div class="stat"><b>${fmtSize(size)}</b><span>Storage</span><i>${settings.maxStorageGB ? `limit ${settings.maxStorageGB} GB` : ''}</i></div>
     </div>
     <div class="toolbar">
       <div class="chips">
         ${chip('all', 'All')}${chip('clip', 'Clips', clips.length)}${chip('shot', 'Screenshots', shots.length)}${chip('fav', 'Favorites', lib.filter((c) => c.favorite).length)}
       </div>
-      <label class="search">${I.search}<input id="q" placeholder="Search by game or title…" spellcheck="false"></label>
+      <label class="search">${I.search}<input id="q" placeholder="Search by game or title…  (Ctrl+F)" spellcheck="false"></label>
+      ${gl.length ? `<div class="select"><select id="gameSel"><option value="">All games</option>${gl.map(([g, n]) => `<option value="${esc(g)}">${esc(g)} (${n})</option>`).join('')}</select></div>` : ''}
       <div class="select"><select id="sort">
         <option value="new">Newest first</option><option value="old">Oldest first</option>
         <option value="long">Longest first</option><option value="big">Largest first</option>
@@ -175,6 +298,11 @@ function renderLibrary() {
   $('#sort').value = ui.sort;
   $('#q').addEventListener('input', (e) => { ui.q = e.target.value; renderGroups(); });
   $('#sort').addEventListener('change', (e) => { ui.sort = e.target.value; renderGroups(); });
+  if ($('#gameSel')) {
+    if (!gl.some(([g]) => g === ui.game)) ui.game = '';
+    $('#gameSel').value = ui.game;
+    $('#gameSel').addEventListener('change', (e) => { ui.game = e.target.value; renderGroups(); });
+  }
   $$('.chip').forEach((b) => b.addEventListener('click', () => {
     ui.filter = b.dataset.filter;
     $$('.chip').forEach((x) => x.classList.toggle('active', x === b));
@@ -183,8 +311,55 @@ function renderLibrary() {
   $('#openDir').addEventListener('click', () => api.openDir());
   $('#heroClip').addEventListener('click', () => api.saveClip());
   $('#heroShot').addEventListener('click', () => api.screenshot());
+  if (latest) bindFeature(latest);
   renderStatus();
   renderGroups();
+}
+
+function featureHTML(c) {
+  return `
+  <section class="feature" id="feature">
+    <div class="feature-media">
+      ${c.thumbUrl ? `<img src="${esc(c.thumbUrl)}" alt="">` : ''}
+      <video muted loop playsinline preload="none"></video>
+      <span class="feature-live"><i></i>Latest</span>
+    </div>
+    <div class="feature-info">
+      <div class="eyebrow">Latest clip · ${esc(ago(c.createdAt))}</div>
+      <h2>${esc(c.title)}</h2>
+      <div class="feature-meta">
+        <span>${fmtDur(c.duration)}</span><i>/</i><span>${fmtSize(c.size)}</span>${c.game && c.game !== c.title ? `<i>/</i><span>${esc(c.game)}</span>` : ''}
+        ${c.sharedDiscord ? `<i>/</i><span class="shared">${I.check}Shared</span>` : ''}
+      </div>
+      <div class="feature-actions">
+        <button class="btn primary" data-fa="play">${I.play}Watch</button>
+        <button class="btn" data-fa="discord">${I.discord}Discord</button>
+        <button class="btn icon-only" data-fa="copy" title="Copy file">${I.copy}</button>
+        <button class="btn icon-only" data-fa="more" title="More">${I.dots}</button>
+      </div>
+    </div>
+  </section>`;
+}
+function bindFeature(c) {
+  const f = $('#feature');
+  const v = $('video', f);
+  const media = $('.feature-media', f);
+  let started = false;
+  media.addEventListener('mouseenter', () => {
+    if (!started) { v.src = c.url; started = true; v.addEventListener('loadedmetadata', () => { try { v.currentTime = Math.min(2, v.duration / 3); } catch {} }, { once: true }); }
+    v.play().then(() => f.classList.add('playing')).catch(() => {});
+  });
+  media.addEventListener('mouseleave', () => { v.pause(); f.classList.remove('playing'); });
+  media.addEventListener('click', () => openPlayer(c.id));
+  f.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-fa]');
+    if (!b) return;
+    const a = b.dataset.fa;
+    if (a === 'play') openPlayer(c.id);
+    if (a === 'discord') shareDiscord(c);
+    if (a === 'copy') copyClip(c);
+    if (a === 'more') openMenu(b, shareItems(c));
+  });
 }
 
 function renderGroups() {
@@ -218,11 +393,13 @@ function renderGroups() {
     groups.push({ key: 'all', label: ui.sort === 'long' ? 'By length' : 'By size', items: list });
   }
   for (const g of groups) {
-    const sec = el(`<section class="group"><div class="group-head"><h3>${esc(g.label)}</h3><span>${g.items.length} ${g.items.length === 1 ? 'item' : 'items'}</span></div><div class="grid"></div></section>`);
+    const total = g.items.reduce((a, c) => a + (c.duration || 0), 0);
+    const sec = el(`<section class="group"><div class="group-head"><h3>${esc(g.label)}</h3><span>${g.items.length} ${g.items.length === 1 ? 'item' : 'items'}${total ? ` · ${fmtDur(total)}` : ''}</span></div><div class="grid"></div></section>`);
     const grid = $('.grid', sec);
-    g.items.forEach((c) => grid.appendChild(card(c)));
+    g.items.forEach((c, i) => { const n = card(c); n.style.animationDelay = `${Math.min(i, 12) * 30}ms`; grid.appendChild(n); });
     box.appendChild(sec);
   }
+  renderStatus();
 }
 
 function card(c) {
@@ -232,21 +409,44 @@ function card(c) {
         ${c.thumbUrl ? `<img src="${esc(c.thumbUrl)}" alt="" loading="lazy">` : '<div class="noimg">no preview</div>'}
         <div class="play-ring"><div>${c.type === 'shot' ? '<svg viewBox="0 0 24 24" style="margin:0"><circle cx="12" cy="12" r="5"/></svg>' : I.play}</div></div>
         <button class="fav-btn ${c.favorite ? 'on' : ''}" title="Favorite">${I.star}</button>
+        <div class="quick">
+          <button data-q="discord" title="Send to Discord">${I.discord}</button>
+          <button data-q="copy" title="Copy file">${I.copy}</button>
+          <button data-q="more" title="More">${I.dots}</button>
+        </div>
         <span class="badge-type">${c.type === 'shot' ? I.shot : I.film}</span>
         ${c.type === 'clip' ? `<span class="badge-dur">${fmtDur(c.duration)}</span>` : ''}
+        <div class="busy-veil"><span class="spinner"></span></div>
       </div>
       <div class="card-meta">
-        <div class="card-title">${esc(c.title)}</div>
-        <div class="card-sub"><span>${fmtTime(c.createdAt)}</span><i>/</i><span>${fmtSize(c.size)}</span>${c.type === 'shot' && c.width ? `<i>/</i><span>${c.width}×${c.height}</span>` : ''}</div>
+        <div class="card-title">${esc(c.title)}${c.sharedDiscord ? `<span class="shared-dot" title="Shared to Discord">${I.discord}</span>` : ''}</div>
+        <div class="card-sub"><span>${fmtTime(c.createdAt)}</span><i>/</i><span>${fmtSize(c.size)}</span>${c.type === 'shot' && c.width ? `<i>/</i><span>${c.width}×${c.height}</span>` : ''}${c.game && c.game !== c.title ? `<i>/</i><span class="g">${esc(c.game)}</span>` : ''}</div>
       </div>
     </article>`);
   node.addEventListener('click', () => openPlayer(c.id));
-  node.addEventListener('keydown', (e) => { if (e.key === 'Enter') openPlayer(c.id); });
+  node.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') openPlayer(c.id);
+    if (e.key.toLowerCase() === 'c' && e.ctrlKey) copyClip(c);
+    if (e.key === 'Delete') confirmDelete(c);
+  });
   $('.fav-btn', node).addEventListener('click', async (e) => {
     e.stopPropagation();
     c.favorite = await api.favorite(c.id);
     e.currentTarget.classList.toggle('on', c.favorite);
     if (ui.filter === 'fav') renderGroups();
+  });
+  $('.quick', node).addEventListener('click', (e) => {
+    e.stopPropagation();
+    const b = e.target.closest('[data-q]');
+    if (!b) return;
+    if (b.dataset.q === 'discord') shareDiscord(c);
+    if (b.dataset.q === 'copy') copyClip(c);
+    if (b.dataset.q === 'more') openMenu(b, [...shareItems(c), '-', { icon: I.trash, label: 'Delete', run: () => confirmDelete(c) }]);
+  });
+  node.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    const fake = { getBoundingClientRect: () => ({ left: e.clientX, right: e.clientX, top: e.clientY, bottom: e.clientY }) };
+    openMenu(fake, [{ icon: I.play, label: 'Open', run: () => openPlayer(c.id) }, ...shareItems(c), '-', { icon: I.trash, label: 'Delete', run: () => confirmDelete(c) }]);
   });
   node.addEventListener('dragstart', (e) => { e.preventDefault(); api.drag(c.id); });
 
@@ -275,7 +475,10 @@ function card(c) {
 async function reloadLibrary() {
   lib = await api.library();
   $('#navCount').textContent = lib.length;
-  if (view === 'library' && $('#modal').classList.contains('hidden')) renderLibrary();
+  if ($('#modal').classList.contains('hidden')) {
+    if (view === 'library') renderLibrary();
+    else if (view === 'profile') renderProfile();
+  }
 }
 
 // ───────────────────────────── player
@@ -290,13 +493,17 @@ function closeModal() {
 function openPlayer(id) {
   const c = lib.find((x) => x.id === id);
   if (!c) return;
+  closeMenu();
   const m = $('#modal');
   const isClip = c.type === 'clip';
+  const idx = filtered().findIndex((x) => x.id === id);
   m.innerHTML = `
   <div class="player">
     <div class="player-head">
       <input class="title-input" id="pTitle" spellcheck="false" maxlength="80">
-      <span class="player-meta">${new Date(c.createdAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })} · ${fmtSize(c.size)}</span>
+      <span class="player-meta">${new Date(c.createdAt).toLocaleString('en-US', { dateStyle: 'medium', timeStyle: 'short' })} · ${fmtSize(c.size)}${c.game && c.game !== c.title ? ` · ${esc(c.game)}` : ''}</span>
+      <button class="x-btn" id="pPrev" title="Previous (↑)"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg></button>
+      <button class="x-btn" id="pNext" title="Next (↓)"><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg></button>
       <button class="x-btn" id="pClose" title="Close (Esc)">${I.x}</button>
     </div>
     <div class="stage ${isClip ? 'paused' : ''}" id="stage">
@@ -315,16 +522,17 @@ function openPlayer(id) {
         <div class="tl-head" id="head"></div>
       </div>
       <div class="trim-info" id="trimInfo"></div>
-      <button class="ctrl-btn stroke" id="pMute" title="Sound">${I.vol}</button>
+      <button class="ctrl-btn speed" id="pSpeed" title="Speed (S)">1×</button>
+      <button class="ctrl-btn stroke" id="pMute" title="Sound (M)">${I.vol}</button>
       <button class="ctrl-btn stroke" id="pFull" title="Fullscreen (F)">${I.full}</button>
     </div>` : ''}
     <div class="player-actions">
       <button class="btn ${c.favorite ? 'on' : ''}" id="pFav">${I.star}${c.favorite ? 'Favorite' : 'Add to favorites'}</button>
       ${isClip ? `<button class="btn" id="pTrim" disabled>${I.scissors}Save selection</button>` : ''}
-      <button class="btn" id="pReveal">${I.folder}Show in folder</button>
-      <button class="btn" id="pOpen">${I.ext}Open externally</button>
+      <button class="btn" id="pDiscord">${I.discord}Discord</button>
+      <button class="btn" id="pShare">${I.share}Share</button>
       <span class="grow"></span>
-      <span class="drag-hint">${I.drag}Drag a card straight into Discord</span>
+      <span class="kbd-hint">${isClip ? '<kbd>I</kbd><kbd>O</kbd> trim · <kbd>,</kbd><kbd>.</kbd> frame · <kbd>S</kbd> speed' : ''}</span>
       <button class="btn danger" id="pDel">${I.trash}Delete</button>
     </div>
   </div>`;
@@ -339,22 +547,33 @@ function openPlayer(id) {
   title.addEventListener('blur', commitTitle);
   title.addEventListener('keydown', (e) => { if (e.key === 'Enter') title.blur(); if (e.key === 'Escape') { title.value = c.title; title.blur(); } e.stopPropagation(); });
 
-  $('#pClose').addEventListener('click', () => { closeModal(); renderLibrary(); });
-  m.onclick = (e) => { if (e.target === m) { closeModal(); renderLibrary(); } };
+  const close = () => { closeModal(); renderCurrent(); };
+  const step = (d) => { const list = filtered(); const n = list[idx + d]; if (n) openPlayer(n.id); };
+  $('#pClose').addEventListener('click', close);
+  $('#pPrev').disabled = idx <= 0;
+  $('#pNext').disabled = idx < 0 || idx >= filtered().length - 1;
+  $('#pPrev').addEventListener('click', () => step(-1));
+  $('#pNext').addEventListener('click', () => step(1));
+  m.onclick = (e) => { if (e.target === m) close(); };
   $('#pFav').addEventListener('click', async (e) => {
     c.favorite = await api.favorite(c.id);
     e.currentTarget.classList.toggle('on', c.favorite);
     e.currentTarget.innerHTML = `${I.star}${c.favorite ? 'Favorite' : 'Add to favorites'}`;
   });
-  $('#pReveal').addEventListener('click', () => api.reveal(c.id));
-  $('#pOpen').addEventListener('click', () => { if (isClip) $('#pVideo').pause(); api.open(c.id); });
+  $('#pDiscord').addEventListener('click', () => shareDiscord(c));
   $('#pDel').addEventListener('click', () => confirmDelete(c));
 
   const cleanups = [];
   player = { id: c.id, cleanup: () => cleanups.forEach((f) => f()) };
 
   if (!isClip) {
-    const onKey = (e) => { if (e.key === 'Escape') { closeModal(); renderLibrary(); } };
+    $('#pShare').addEventListener('click', (e) => openMenu(e.currentTarget, shareItems(c)));
+    const onKey = (e) => {
+      if (document.activeElement === title) return;
+      if (e.key === 'Escape') close();
+      else if (e.key === 'ArrowUp') step(-1);
+      else if (e.key === 'ArrowDown') step(1);
+    };
     window.addEventListener('keydown', onKey);
     cleanups.push(() => window.removeEventListener('keydown', onKey));
     return;
@@ -366,6 +585,7 @@ function openPlayer(id) {
   let dur = c.duration || 1;
   let a = 0, b = dur;
   let raf = 0;
+  $('#pShare').addEventListener('click', (e) => openMenu(e.currentTarget, shareItems(c, () => [a, b])));
 
   const pct = (t) => `${(t / dur) * 100}%`;
   function layout() {
@@ -400,10 +620,16 @@ function openPlayer(id) {
   $('#pPlay').addEventListener('click', toggle);
   $('#pMute').addEventListener('click', (e) => { v.muted = !v.muted; e.currentTarget.innerHTML = v.muted ? I.mute : I.vol; });
   $('#pFull').addEventListener('click', () => (document.fullscreenElement ? document.exitFullscreen() : stage.requestFullscreen()));
+  const speeds = [1, 1.5, 2, 0.25, 0.5];
+  $('#pSpeed').addEventListener('click', (e) => {
+    const next = speeds[(speeds.indexOf(v.playbackRate) + 1) % speeds.length];
+    v.playbackRate = next;
+    e.currentTarget.textContent = `${next}×`;
+    e.currentTarget.classList.toggle('on', next !== 1);
+  });
   raf = requestAnimationFrame(frame);
   layout();
 
-  // timeline: seek + trim handles
   const tAt = (clientX) => {
     const r = tl.getBoundingClientRect();
     return Math.max(0, Math.min(dur, ((clientX - r.left) / r.width) * dur));
@@ -445,15 +671,22 @@ function openPlayer(id) {
   });
 
   const onKey = (e) => {
-    if (document.activeElement === title) return;
+    if (document.activeElement === title || document.querySelector('.confirm')) return;
+    const k = e.key.toLowerCase();
     if (e.key === ' ') { e.preventDefault(); toggle(); }
-    else if (e.key === 'Escape') { if (!document.fullscreenElement) { closeModal(); renderLibrary(); } }
+    else if (e.key === 'Escape') { if (menuEl) closeMenu(); else if (!document.fullscreenElement) close(); }
     else if (e.key === 'ArrowLeft') v.currentTime = Math.max(0, v.currentTime - (e.shiftKey ? 1 : 5));
     else if (e.key === 'ArrowRight') v.currentTime = Math.min(dur, v.currentTime + (e.shiftKey ? 1 : 5));
-    else if (e.key.toLowerCase() === 'i') { a = Math.min(v.currentTime, b - 0.5); layout(); }
-    else if (e.key.toLowerCase() === 'o') { b = Math.max(v.currentTime, a + 0.5); layout(); }
-    else if (e.key.toLowerCase() === 'f') $('#pFull').click();
-    else if (e.key.toLowerCase() === 'm') $('#pMute').click();
+    else if (e.key === 'ArrowUp') step(-1);
+    else if (e.key === 'ArrowDown') step(1);
+    else if (e.key === ',') { v.pause(); v.currentTime = Math.max(0, v.currentTime - 1 / 60); }
+    else if (e.key === '.') { v.pause(); v.currentTime = Math.min(dur, v.currentTime + 1 / 60); }
+    else if (k === 'i') { a = Math.min(v.currentTime, b - 0.5); layout(); }
+    else if (k === 'o') { b = Math.max(v.currentTime, a + 0.5); layout(); }
+    else if (k === 'f') $('#pFull').click();
+    else if (k === 'm') $('#pMute').click();
+    else if (k === 's') $('#pSpeed').click();
+    else if (k === 'c' && e.ctrlKey) copyClip(c);
   };
   window.addEventListener('keydown', onKey);
   cleanups.push(() => {
@@ -463,16 +696,13 @@ function openPlayer(id) {
   });
 }
 
-function confirmDelete(c) {
+function dialog({ title, body, actions, wide = false, onMount }) {
   const box = el(`
-    <div class="modal" style="z-index:60">
-      <div class="confirm">
-        <h3>Delete "${esc(c.title)}"?</h3>
-        <p>The file is moved to the Recycle Bin and removed from your library.</p>
-        <div class="row-btns">
-          <button class="btn" data-a="no">Cancel</button>
-          <button class="btn primary" data-a="yes">${I.trash}Delete</button>
-        </div>
+    <div class="modal dlg-wrap" style="z-index:60">
+      <div class="confirm ${wide ? 'wide' : ''}">
+        <h3>${title}</h3>
+        <div class="dlg-body">${body}</div>
+        <div class="row-btns">${actions.map((a, i) => `<button class="btn ${a.primary ? 'primary' : ''}" data-a="${i}">${a.icon || ''}${esc(a.label)}</button>`).join('')}</div>
       </div>
     </div>`);
   document.body.appendChild(box);
@@ -480,18 +710,273 @@ function confirmDelete(c) {
   const key = (e) => { if (e.key === 'Escape') { e.stopPropagation(); done(); } };
   window.addEventListener('keydown', key, true);
   box.addEventListener('click', async (e) => {
-    const a = e.target.closest('[data-a]');
-    if (e.target === box || (a && a.dataset.a === 'no')) return done();
-    if (a && a.dataset.a === 'yes') {
-      done();
-      await api.remove(c.id);
-      closeModal();
-      lib = await api.library();
-      $('#navCount').textContent = lib.length;
-      renderLibrary();
-      snack('Moved to Recycle Bin');
-    }
+    if (e.target === box) return done();
+    const b = e.target.closest('[data-a]');
+    if (!b) return;
+    const act = actions[Number(b.dataset.a)];
+    if (!act.run) return done();
+    const keep = await act.run(box, b);
+    if (keep !== true) done();
   });
+  if (onMount) onMount(box);
+  return { close: done, box };
+}
+
+function confirmDelete(c) {
+  dialog({
+    title: `Delete "${esc(c.title)}"?`,
+    body: '<p>The file is moved to the Recycle Bin and removed from your library.</p>',
+    actions: [
+      { label: 'Cancel' },
+      {
+        label: 'Delete', primary: true, icon: I.trash, run: async () => {
+          await api.remove(c.id);
+          closeModal();
+          lib = await api.library();
+          $('#navCount').textContent = lib.length;
+          renderCurrent();
+          snack('Moved to Recycle Bin');
+        },
+      },
+    ],
+  });
+}
+
+function renderCurrent() {
+  if (view === 'library') renderLibrary();
+  else if (view === 'profile') renderProfile();
+  else renderSettings();
+}
+
+// ───────────────────────────── profile
+function googleSetupDialog(after) {
+  dialog({
+    wide: true,
+    title: `${I.google} Set up Google sign-in`,
+    body: `
+      <p>Google sign-in needs your own free OAuth client ID. This takes about 5 minutes and only has to be done once.</p>
+      <ol class="steps">
+        <li>Open the <a href="#" id="gHelp">Google Cloud Console</a> and create a project (any name).</li>
+        <li>Go to <b>APIs &amp; Services → OAuth consent screen</b>, choose <b>External</b>, fill in an app name and add yourself as a test user.</li>
+        <li>Go to <b>Credentials → Create credentials → OAuth client ID</b> and pick <b>Desktop app</b>.</li>
+        <li>Paste the client ID and client secret below.</li>
+      </ol>
+      <label class="field"><span>Client ID</span><input id="gId" spellcheck="false" placeholder="xxxxxxxx.apps.googleusercontent.com" value="${esc(settings.googleClientId || '')}"></label>
+      <label class="field"><span>Client secret</span><input id="gSecret" type="password" spellcheck="false" placeholder="GOCSPX-…" value="${esc(settings.googleClientSecret || '')}"></label>`,
+    actions: [
+      { label: 'Cancel' },
+      {
+        label: 'Save & sign in', primary: true, icon: I.google, run: async (box) => {
+          const id = $('#gId', box).value.trim();
+          const secret = $('#gSecret', box).value.trim();
+          if (!/\.apps\.googleusercontent\.com$/.test(id)) { snack('That client ID does not look right'); return true; }
+          settings = await api.setSettings({ googleClientId: id, googleClientSecret: secret });
+          profile = await api.profile();
+          signInGoogle(after);
+        },
+      },
+    ],
+    onMount: (box) => $('#gHelp', box).addEventListener('click', (e) => { e.preventDefault(); api.googleHelp(); }),
+  });
+}
+async function signInGoogle(after) {
+  if (!profile.googleConfigured) return googleSetupDialog(after);
+  snack('Continue in your browser…', { busy: true });
+  const r = await api.googleSignIn();
+  if (r.needsSetup) { $('#snack').classList.remove('show'); return googleSetupDialog(after); }
+  profile = await api.profile();
+  settings = await api.getSettings();
+  renderChip();
+  snack(r.ok ? `Signed in as ${profile.google.email}` : `Google: ${r.error}`, { ms: 3500 });
+  if (after) after(); else if (view === 'profile') renderProfile();
+}
+
+function profileStats() {
+  const clips = lib.filter((c) => c.type === 'clip');
+  const g = games().slice(0, 5);
+  const max = g.length ? g[0][1] : 1;
+  const days = [];
+  for (let i = 13; i >= 0; i--) {
+    const d = new Date(); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - i);
+    const k = dayKey(d.getTime());
+    days.push({ d, n: lib.filter((c) => dayKey(c.createdAt) === k).length });
+  }
+  const dmax = Math.max(1, ...days.map((x) => x.n));
+  let streak = 0;
+  for (let i = days.length - 1; i >= 0 && days[i].n; i--) streak++;
+  return { clips, g, max, days, dmax, streak };
+}
+
+async function renderProfile() {
+  profile = await api.profile();
+  settings = await api.getSettings();
+  renderChip();
+  const st = profileStats();
+  const hours = st.clips.reduce((a, c) => a + (c.duration || 0), 0);
+  const shared = lib.filter((c) => c.sharedDiscord).length;
+  const p = profile;
+  $('#view').innerHTML = `
+  <div class="page">
+    <section class="profile-hero">
+      <button class="avatar-edit" id="avEdit" title="Change picture">${avatarHTML('xl')}<span class="av-cam">${I.camera}</span></button>
+      <div class="ph-text">
+        <div class="eyebrow">Profile</div>
+        <input class="name-input" id="pName" placeholder="Your name" maxlength="32" spellcheck="false" value="${esc(p.name || '')}">
+        <div class="ph-sub">${p.google ? `${I.google}<span>${esc(p.google.email)}</span>` : '<span>Local profile · stored only on this PC</span>'}</div>
+      </div>
+      <div class="ph-badges">
+        <div class="pbadge"><b>${st.streak}</b><span>day streak</span></div>
+        <div class="pbadge"><b>${lib.filter((c) => c.favorite).length}</b><span>favorites</span></div>
+        <div class="pbadge"><b>${shared}</b><span>shared</span></div>
+      </div>
+    </section>
+
+    <div class="section-title"><span class="num">01</span><h2>Connected accounts</h2></div>
+    <div class="connections">
+      <div class="conn ${p.google ? 'linked' : ''}">
+        <div class="conn-head">
+          <span class="conn-logo">${I.google}</span>
+          <div><b>Google</b><small>${p.google ? `Signed in as ${esc(p.google.email)}` : 'Sign in to put your name and picture on your clips'}</small></div>
+          <span class="conn-state">${p.google ? 'Linked' : 'Not linked'}</span>
+        </div>
+        <div class="conn-body">
+          ${p.google
+            ? `<button class="btn" id="gOut">Sign out</button>`
+            : `<button class="btn primary" id="gIn">${I.google}Sign in with Google</button>${p.googleConfigured ? '<button class="btn" id="gSetup">Edit client ID</button>' : ''}`}
+        </div>
+      </div>
+      <div class="conn ${p.discord ? 'linked' : ''}">
+        <div class="conn-head">
+          <span class="conn-logo">${I.discord}</span>
+          <div><b>Discord</b><small>${p.discord ? `Posting to <b>#${esc(p.discord.name)}</b>` : 'Send clips to any channel with one click'}</small></div>
+          <span class="conn-state">${p.discord ? 'Linked' : 'Not linked'}</span>
+        </div>
+        <div class="conn-body">
+          ${p.discord ? `
+            <div class="conn-row"><div><b>Auto-post new clips</b><small>Every saved clip goes straight to Discord</small></div><button class="switch ${settings.discordAutoPost ? 'on' : ''}" id="dAuto"></button></div>
+            <div class="conn-row"><div><b>Upload limit</b><small>Bigger clips get compressed automatically</small></div>
+              <div class="seg" id="dLimit">${[[10, '10 MB'], [50, '50 MB'], [500, '500 MB']].map(([v, l]) => `<button data-v="${v}" class="${settings.discordLimitMB === v ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+            <div class="conn-actions"><button class="btn" id="dTest">${I.check}Send test message</button><button class="btn" id="dOut">Disconnect</button></div>`
+          : `
+            <div class="webhook-field"><span>${I.link}</span><input id="dUrl" placeholder="Paste a Discord webhook URL…" spellcheck="false"><button class="btn primary" id="dIn">Connect</button></div>
+            <small class="conn-help">Discord → Server settings → Integrations → Webhooks → New webhook → Copy URL. <a href="#" id="dHelp">How it works</a></small>`}
+        </div>
+      </div>
+    </div>
+
+    <div class="section-title"><span class="num">02</span><h2>Your stats</h2></div>
+    <div class="stats">
+      <div class="stat"><b>${st.clips.length}</b><span>Clips</span></div>
+      <div class="stat"><b>${lib.length - st.clips.length}</b><span>Screenshots</span></div>
+      <div class="stat"><b>${fmtDur(hours)}</b><span>Clipped time</span></div>
+      <div class="stat"><b>${games().length}</b><span>Games</span></div>
+    </div>
+    <div class="charts">
+      <div class="chart-card">
+        <div class="chart-head"><b>Top games</b><span>by clips</span></div>
+        ${st.g.length ? st.g.map(([name, n]) => `
+          <div class="bar-row"><span class="bar-label">${esc(name)}</span><div class="bar"><i style="width:${(n / st.max) * 100}%"></i></div><span class="bar-n">${n}</span></div>`).join('')
+          : '<p class="muted">Clip something in a game and it shows up here.</p>'}
+      </div>
+      <div class="chart-card">
+        <div class="chart-head"><b>Activity</b><span>last 14 days</span></div>
+        <div class="cols">${st.days.map((x) => `<div class="col" title="${x.n} on ${x.d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}"><i style="height:${Math.max(4, (x.n / st.dmax) * 100)}%" class="${x.n ? '' : 'zero'}"></i><span>${x.d.toLocaleDateString('en-US', { weekday: 'narrow' })}</span></div>`).join('')}</div>
+      </div>
+    </div>
+  </div>`;
+
+  $('#avEdit').addEventListener('click', (e) => {
+    openMenu(e.currentTarget, [
+      { icon: I.camera, label: 'Choose picture…', run: async () => { profile = await api.chooseAvatar(); renderProfile(); } },
+      ...(profile.avatarUrl ? [{ icon: I.trash, label: 'Remove picture', run: async () => { profile = await api.clearAvatar(); renderProfile(); } }] : []),
+    ]);
+  });
+  const nameIn = $('#pName');
+  const saveName = async () => {
+    const v = nameIn.value.trim();
+    if (v === (settings.profileName || '')) return;
+    settings = await api.setSettings({ profileName: v });
+    profile = await api.profile();
+    renderChip();
+    snack('Name saved');
+  };
+  nameIn.addEventListener('blur', saveName);
+  nameIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') nameIn.blur(); });
+
+  if ($('#gIn')) $('#gIn').addEventListener('click', () => signInGoogle());
+  if ($('#gSetup')) $('#gSetup').addEventListener('click', () => googleSetupDialog());
+  if ($('#gOut')) $('#gOut').addEventListener('click', async () => { profile = await api.googleSignOut(); renderChip(); renderProfile(); snack('Signed out of Google'); });
+  if ($('#dIn')) {
+    const connect = async () => {
+      const btn = $('#dIn');
+      btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>';
+      const r = await api.discordConnect($('#dUrl').value);
+      if (r.ok) { snack(`Connected to #${r.info.name}`); profile = await api.profile(); renderChip(); renderProfile(); }
+      else { snack(r.error, { ms: 3500 }); btn.disabled = false; btn.textContent = 'Connect'; }
+    };
+    $('#dIn').addEventListener('click', connect);
+    $('#dUrl').addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
+    $('#dHelp').addEventListener('click', (e) => { e.preventDefault(); api.external('webhookHelp'); });
+  }
+  if ($('#dOut')) $('#dOut').addEventListener('click', async () => { profile = await api.discordDisconnect(); settings = await api.getSettings(); renderChip(); renderProfile(); snack('Discord disconnected'); });
+  if ($('#dTest')) $('#dTest').addEventListener('click', async () => { snack('Sending…', { busy: true }); const r = await api.discordTest(); snack(r.ok ? 'Test message sent — check Discord' : `Discord: ${r.error}`); });
+  if ($('#dAuto')) $('#dAuto').addEventListener('click', async (e) => { const v = !settings.discordAutoPost; e.currentTarget.classList.toggle('on', v); settings = await api.setSettings({ discordAutoPost: v }); });
+  if ($('#dLimit')) $('#dLimit').addEventListener('click', async (e) => {
+    const b = e.target.closest('button'); if (!b) return;
+    $$('#dLimit button').forEach((x) => x.classList.toggle('on', x === b));
+    settings = await api.setSettings({ discordLimitMB: Number(b.dataset.v) });
+  });
+}
+
+// ───────────────────────────── onboarding
+function onboarding() {
+  let step = 0;
+  const m = $('#modal');
+  if (player) { player.cleanup(); player = null; }
+  m.onclick = null;
+  m.classList.remove('hidden');
+  m.classList.add('onb-wrap');
+  const render = () => {
+    const slides = [
+      `<div class="onb-art"><div class="onb-logo"><svg viewBox="0 0 100 100"><path d="M70.1 34.3 A25.5 25.5 0 1 0 70.1 65.7" fill="none" stroke="#000" stroke-width="10" stroke-linecap="round"/><circle cx="50" cy="50" r="8.5" fill="#000"/></svg></div></div>
+       <h2>Welcome to Clipy</h2>
+       <p>Clipy quietly keeps the last <b>${settings.clipLength} seconds</b> of your screen. When something epic happens, press <kbd>${esc(settings.clipHotkey)}</kbd> — the moment is saved, with sound.</p>
+       <div class="onb-keys"><div class="k">${esc(settings.clipHotkey)}<small>save clip</small></div><div class="k">${esc(settings.screenshotHotkey)}<small>screenshot</small></div></div>`,
+      `<div class="onb-art">${avatarHTML('xl')}</div>
+       <h2>Make it yours</h2>
+       <p>Pick a name for your clips. You can also sign in with Google to use your account name and picture.</p>
+       <input class="onb-input" id="oName" placeholder="Your name" maxlength="32" value="${esc(profile.name || '')}" spellcheck="false">
+       <button class="btn google-btn" id="oGoogle">${I.google}${profile.google ? `Signed in as ${esc(profile.google.email)}` : 'Sign in with Google'}</button>`,
+      `<div class="onb-art"><span class="onb-icon">${I.discord}</span></div>
+       <h2>Share instantly</h2>
+       <p>Connect a Discord channel and send any clip there with one click. Big clips are compressed automatically to fit.</p>
+       ${profile.discord ? `<div class="onb-ok">${I.check}Connected to #${esc(profile.discord.name)}</div>` :
+        `<div class="webhook-field"><span>${I.link}</span><input id="oHook" placeholder="Paste a Discord webhook URL (optional)" spellcheck="false"><button class="btn" id="oHookBtn">Connect</button></div>`}
+       <small class="conn-help">You can always do this later in your profile.</small>`,
+    ];
+    m.innerHTML = `
+      <div class="onb">
+        <div class="onb-slide">${slides[step]}</div>
+        <div class="onb-foot">
+          <div class="dots">${slides.map((_, i) => `<i class="${i === step ? 'on' : ''}"></i>`).join('')}</div>
+          <div class="onb-btns">
+            ${step > 0 ? '<button class="btn" id="oBack">Back</button>' : '<button class="btn ghost" id="oSkip">Skip</button>'}
+            <button class="btn primary" id="oNext">${step === slides.length - 1 ? 'Start clipping' : 'Continue'}${I.arrow}</button>
+          </div>
+        </div>
+      </div>`;
+    const saveName = async () => { const n = $('#oName'); if (n && n.value.trim() !== (settings.profileName || '')) { settings = await api.setSettings({ profileName: n.value.trim() }); profile = await api.profile(); renderChip(); } };
+    const finish = async () => { await saveName(); settings = await api.setSettings({ onboarded: true }); m.classList.remove('onb-wrap'); closeModal(); renderCurrent(); };
+    $('#oNext').addEventListener('click', async () => { await saveName(); if (step === slides.length - 1) finish(); else { step++; render(); } });
+    if ($('#oBack')) $('#oBack').addEventListener('click', async () => { await saveName(); step--; render(); });
+    if ($('#oSkip')) $('#oSkip').addEventListener('click', finish);
+    if ($('#oGoogle') && !profile.google) $('#oGoogle').addEventListener('click', async () => { await saveName(); signInGoogle(() => render()); });
+    if ($('#oHookBtn')) $('#oHookBtn').addEventListener('click', async () => {
+      const r = await api.discordConnect($('#oHook').value);
+      if (r.ok) { profile = await api.profile(); renderChip(); render(); snack(`Connected to #${r.info.name}`); } else snack(r.error);
+    });
+  };
+  render();
 }
 
 // ───────────────────────────── settings
@@ -511,7 +996,7 @@ async function renderSettings() {
     <div class="settings">
       <div class="settings-nav" id="sNav">
         <a data-t="s-rec" class="active">Capture</a><a data-t="s-audio">Audio</a><a data-t="s-keys">Hotkeys</a>
-        <a data-t="s-store">Storage</a><a data-t="s-gen">General</a><a data-t="s-info">Info</a>
+        <a data-t="s-store">Storage</a><a data-t="s-gen">General</a><a data-t="s-info">About</a>
       </div>
       <div>
         <div class="section" id="s-rec">
@@ -538,6 +1023,7 @@ async function renderSettings() {
         <div class="section" id="s-store">
           <div class="section-head"><span class="num">04</span><h2>Storage</h2></div>
           ${row('Clips folder', `<code id="dirPath">${esc(s.clipsDir)}</code>`, `<button class="btn" id="dirOpen">${I.folder}Open</button><button class="btn" id="dirChange">Change</button>`)}
+          ${row('Storage limit', 'When the library gets bigger, the oldest clips go to the Recycle Bin. Favorites are never touched.', seg('maxStorageGB', [[0, 'Off'], [10, '10 GB'], [25, '25 GB'], [50, '50 GB'], [100, '100 GB']], true))}
         </div>
         <div class="section" id="s-gen">
           <div class="section-head"><span class="num">05</span><h2>General</h2></div>
@@ -545,10 +1031,13 @@ async function renderSettings() {
           ${row('Keep running in tray', 'Keep recording in the background when the window is closed.', sw('minimizeToTray'))}
           ${row('Overlay notification', 'Small popup in the top-right when a clip is saved.', sw('overlay'))}
           ${row('Sound cue', 'Short beep to confirm a clip.', sw('soundCue'))}
+          ${row('Check for updates', 'Shows a badge in the sidebar when a new version is on GitHub.', sw('checkUpdates'))}
+          ${row('Welcome tour', 'Show the intro screens again.', '<button class="btn" id="tour">Replay tour</button>')}
         </div>
         <div class="section" id="s-info">
-          <div class="section-head"><span class="num">06</span><h2>Info</h2></div>
+          <div class="section-head"><span class="num">06</span><h2>About</h2></div>
           <div class="info-grid" id="infoGrid"></div>
+          <div class="row"><div class="row-text"><b>Clipy is open source</b><small>Source code, releases and changelog on GitHub.</small></div><div class="row-ctrl"><button class="btn" id="ghRepo">${I.github}GitHub</button></div></div>
         </div>
       </div>
     </div>
@@ -559,7 +1048,7 @@ async function renderSettings() {
     settings = await api.setSettings(patch);
     renderStatus();
   };
-  $$('.seg').forEach((g) => g.addEventListener('click', (e) => {
+  $$('.seg[data-key]').forEach((g) => g.addEventListener('click', (e) => {
     const btn = e.target.closest('button');
     if (!btn) return;
     $$('button', g).forEach((x) => x.classList.toggle('on', x === btn));
@@ -584,9 +1073,10 @@ async function renderSettings() {
     const d = await api.chooseDir();
     if (d) { settings.clipsDir = d; $('#dirPath').textContent = d; snack('Save location changed'); }
   });
+  $('#tour').addEventListener('click', () => onboarding());
+  $('#ghRepo').addEventListener('click', () => api.external('repo'));
   $$('[data-hotkey]').forEach((b) => b.addEventListener('click', () => listenHotkey(b)));
 
-  // settings side-nav
   const view = $('#view');
   $$('#sNav a').forEach((a) => a.addEventListener('click', () => {
     const t = document.getElementById(a.dataset.t);
@@ -611,7 +1101,7 @@ function renderInfo() {
   g.innerHTML = `
     <div><span>Encoder</span><b>${esc(ENCODERS[state.encoder] || state.encoder || '…')}</b></div>
     <div><span>Capture</span><b>${inf ? `${inf.width}×${inf.height} · ${inf.fps}fps · ${esc(inf.codec)}` : '—'}</b></div>
-    <div><span>Version</span><b>Clipy ${esc(state.version || '')}</b></div>`;
+    <div><span>Version</span><b>Clipy ${esc(state.version || '')}${state.update ? ` → ${esc(state.update.version)}` : ''}</b></div>`;
 }
 
 const CODE_MAP = {
@@ -682,18 +1172,27 @@ function listenHotkey(btn) {
 // ───────────────────────────── boot
 $$('[data-win]').forEach((b) => b.addEventListener('click', () => api.win(b.dataset.win)));
 $$('.nav-item').forEach((b) => b.addEventListener('click', () => go(b.dataset.view)));
+$('#profileChip').addEventListener('click', () => go('profile'));
+$('#updateBadge').addEventListener('click', () => api.openUpdate());
 $('#sideClip').addEventListener('click', () => api.saveClip());
 $('#sideToggle').addEventListener('click', async () => {
   state = await api.toggleBuffer();
   settings = await api.getSettings();
   renderStatus();
 });
+window.addEventListener('keydown', (e) => {
+  if (e.ctrlKey && e.key.toLowerCase() === 'f' && view === 'library' && $('#modal').classList.contains('hidden')) { e.preventDefault(); const q = $('#q'); if (q) q.focus(); }
+});
+window.addEventListener('resize', closeMenu);
+$('#view').addEventListener('scroll', closeMenu);
 api.on('state', (s) => { state = s; renderStatus(); renderInfo(); });
 api.on('library-changed', reloadLibrary);
 
 (async () => {
-  [state, settings, lib] = await Promise.all([api.state(), api.getSettings(), api.library()]);
+  [state, settings, lib, profile] = await Promise.all([api.state(), api.getSettings(), api.library(), api.profile()]);
   $('#navCount').textContent = lib.length;
+  renderChip();
   renderStatus();
   go('library');
+  if (!settings.onboarded) onboarding();
 })();

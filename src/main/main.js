@@ -48,6 +48,19 @@ const DEFAULTS = {
   minimizeToTray: true,
   overlay: true,
   soundCue: true,
+  // v1.0.1
+  onboarded: false,
+  profileName: '',
+  avatar: null,
+  google: null,
+  googleClientId: '',
+  googleClientSecret: '',
+  discordWebhook: '',
+  discordInfo: null,
+  discordAutoPost: false,
+  discordLimitMB: 10,
+  maxStorageGB: 0,
+  checkUpdates: true,
 };
 
 // ───────────────────────────────────────────── persistence
@@ -82,6 +95,8 @@ let encoder = 'libx264';
 const rec = { ready: false, error: null, info: null, currentId: null };
 let saving = false;
 let hotkeyErrors = [];
+let update = null; // { version, url } when a newer release exists
+const busy = new Set(); // clip ids with a running share/export job
 
 function publicState() {
   return {
@@ -94,6 +109,8 @@ function publicState() {
     hotkeyErrors,
     version: app.getVersion(),
     ffmpeg: !!FFMPEG && fs.existsSync(FFMPEG),
+    update,
+    busy: [...busy],
   };
 }
 function pushState() {
@@ -176,7 +193,9 @@ function detectGame() {
         const title = rest.join('|').trim();
         if (!proc || IGNORE_PROCS.has(proc.toLowerCase())) return resolve(null);
         let name = title || proc;
-        name = name.replace(/\s*[-–|]\s*(Steam|Epic Games|Direct3D.*|DX1\d.*|Vulkan.*)$/i, '').trim();
+        name = name.replace(/\s*[-–—|]\s*(Steam|Epic Games|Direct3D.*|DX1\d.*|Vulkan.*|Google Chrome|Mozilla Firefox|Microsoft\S* Edge|Opera.*|Brave|Visual Studio Code)$/i, '').trim();
+        // long browser/app titles: keep the most specific part
+        if (name.length > 32 && /\s[-–—|]\s/.test(name)) name = name.split(/\s[-–—|]\s/)[0].trim();
         resolve(name.slice(0, 60) || null);
       });
   });
@@ -354,6 +373,7 @@ async function saveClip() {
     };
     library.unshift(item); saveLibrary(); pushLibrary();
     toast({ kind: 'done', title: 'Clip saved', sub: `${Math.round(dur)}s${game ? ' · ' + game : ''}` });
+    afterNewItem(item);
     return { ok: true, id };
   } catch (e) {
     console.error(e);
@@ -394,6 +414,7 @@ async function takeScreenshot() {
   };
   library.unshift(item); saveLibrary(); pushLibrary();
   toast({ kind: 'shot', title: 'Screenshot saved', sub: `${payload.width}×${payload.height}`, sound: true });
+  afterNewItem(item);
   return { ok: true, id };
 }
 
@@ -420,6 +441,299 @@ async function trimClip(id, a, b) {
   library.unshift(item); saveLibrary(); pushLibrary();
   return { ok: true, id: nid };
 }
+
+// ───────────────────────────────────────────── v1.0.1: sharing & integrations
+const http = require('http');
+const crypto = require('crypto');
+
+function afterNewItem(item) {
+  enforceStorage().catch(() => {});
+  if (settings.discordAutoPost && settings.discordWebhook) {
+    discordSend(item.id, { auto: true })
+      .then(() => toast({ kind: 'discord', title: 'Posted to Discord', sub: settings.discordInfo ? `#${settings.discordInfo.name}` : item.title }))
+      .catch((e) => toast({ kind: 'error', title: 'Discord upload failed', sub: String(e.message).slice(0, 80) }));
+  }
+}
+
+async function enforceStorage() {
+  if (!settings.maxStorageGB) return;
+  const max = settings.maxStorageGB * 1e9;
+  let total = library.reduce((a, c) => a + (c.size || 0), 0);
+  if (total <= max) return;
+  const victims = library.filter((c) => !c.favorite).sort((a, b) => a.createdAt - b.createdAt);
+  let removed = 0;
+  for (const v of victims) {
+    if (total <= max) break;
+    try { await shell.trashItem(v.file); } catch {}
+    if (v.thumb) fs.rm(v.thumb, { force: true }, () => {});
+    library = library.filter((x) => x.id !== v.id);
+    total -= v.size || 0;
+    removed++;
+  }
+  if (removed) { saveLibrary(); pushLibrary(); }
+}
+
+function setBusy(id, on) { on ? busy.add(id) : busy.delete(id); pushState(); }
+
+// copies a file to the Windows clipboard as a real file (paste into Discord, Explorer, Gmail…)
+function copyFileToClipboard(file) {
+  return new Promise((resolve) => {
+    if (TEST_DIR) return resolve(true); // don't touch the real clipboard during self-tests
+    const script = `Set-Clipboard -LiteralPath '${file.replace(/'/g, "''")}'`;
+    const enc = Buffer.from(script, 'utf16le').toString('base64');
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-STA', '-EncodedCommand', enc],
+      { windowsHide: true, timeout: 10000 }, (err) => resolve(!err));
+  });
+}
+
+// ── Discord (webhook – no developer app or login needed)
+const WEBHOOK_RE = /^https:\/\/(?:canary\.|ptb\.)?discord(?:app)?\.com\/api\/webhooks\/\d+\/[\w-]+\/?$/;
+async function discordConnect(url) {
+  url = String(url || '').trim();
+  if (!WEBHOOK_RE.test(url)) return { ok: false, error: 'That does not look like a Discord webhook URL' };
+  try {
+    const r = await fetch(url);
+    if (!r.ok) return { ok: false, error: `Discord rejected the webhook (${r.status})` };
+    const j = await r.json();
+    settings.discordWebhook = url;
+    settings.discordInfo = { name: j.name || 'Webhook', channel_id: j.channel_id, guild_id: j.guild_id };
+    saveSettings();
+    return { ok: true, info: settings.discordInfo };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+async function discordPost(form) {
+  const r = await fetch(settings.discordWebhook + '?wait=true', { method: 'POST', body: form });
+  if (!r.ok) {
+    let msg = `HTTP ${r.status}`;
+    try { const j = await r.json(); if (j.message) msg = j.message; } catch {}
+    throw new Error(msg);
+  }
+}
+async function discordTest() {
+  if (!settings.discordWebhook) return { ok: false, error: 'Not connected' };
+  try {
+    const form = new FormData();
+    form.append('payload_json', JSON.stringify({ username: 'Clipy', content: '◉ **Clipy is connected.** New clips can be shared here with one click.' }));
+    await discordPost(form);
+    return { ok: true };
+  } catch (e) { return { ok: false, error: e.message }; }
+}
+async function compressForLimit(c, limitBytes) {
+  const dur = Math.max(1, c.duration || 1);
+  let factor = 1;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const totalBits = limitBytes * 8 * 0.9 * factor;
+    const abps = 96000;
+    const vbps = Math.max(120000, Math.floor(totalBits / dur - abps));
+    const h = vbps > 2.5e6 ? 1080 : vbps > 1.2e6 ? 720 : vbps > 500e3 ? 540 : 360;
+    const fps = vbps > 1.5e6 ? Math.min(60, settings.fps) : 30;
+    const out = path.join(os.tmpdir(), `clipy-share-${c.id}-${attempt}.mp4`);
+    await ffmpeg(['-y', '-hide_banner', '-loglevel', 'error', '-i', c.file,
+      '-vf', `scale=-2:'min(${h},ih)',fps=${fps},format=yuv420p`,
+      '-c:v', 'libx264', '-preset', 'veryfast', '-b:v', String(vbps), '-maxrate', String(Math.floor(vbps * 1.15)), '-bufsize', String(vbps * 2),
+      '-c:a', 'aac', '-b:a', '96k', '-movflags', '+faststart', out]);
+    const size = fs.statSync(out).size;
+    if (size <= limitBytes) return out;
+    fs.rm(out, { force: true }, () => {});
+    factor *= 0.75;
+  }
+  throw new Error('Clip is too long to fit the Discord size limit – trim it first');
+}
+async function discordSend(id) {
+  const c = library.find((x) => x.id === id);
+  if (!c) throw new Error('Clip not found');
+  if (!settings.discordWebhook) throw new Error('Discord is not connected');
+  setBusy(id, true);
+  let tmp = null;
+  try {
+    const limit = (settings.discordLimitMB || 10) * 1000 * 1000 * 0.98;
+    let file = c.file;
+    if (c.size > limit) {
+      if (c.type === 'shot') {
+        tmp = path.join(os.tmpdir(), `clipy-share-${c.id}.jpg`);
+        await ffmpeg(['-y', '-hide_banner', '-loglevel', 'error', '-i', c.file, '-q:v', '3', tmp]);
+      } else {
+        tmp = await compressForLimit(c, limit);
+      }
+      file = tmp;
+    }
+    const ext = path.extname(file).toLowerCase();
+    const mime = ext === '.mp4' ? 'video/mp4' : ext === '.png' ? 'image/png' : ext === '.gif' ? 'image/gif' : 'image/jpeg';
+    const form = new FormData();
+    const who = settings.profileName ? ` · by ${settings.profileName}` : '';
+    form.append('payload_json', JSON.stringify({
+      username: 'Clipy',
+      content: `**${c.title}**${c.game && c.game !== c.title ? ` · ${c.game}` : ''}${who}`,
+    }));
+    form.append('files[0]', new Blob([fs.readFileSync(file)], { type: mime }), `${c.title.replace(/[^\w\- ]+/g, '').trim() || 'clip'}${ext}`);
+    await discordPost(form);
+    c.sharedDiscord = Date.now();
+    saveLibrary(); pushLibrary();
+    return { ok: true };
+  } finally {
+    if (tmp) fs.rm(tmp, { force: true }, () => {});
+    setBusy(id, false);
+  }
+}
+
+// ── GIF export
+async function makeGif(id, a, b) {
+  const c = library.find((x) => x.id === id);
+  if (!c || c.type !== 'clip') throw new Error('Clip not found');
+  setBusy(id, true);
+  try {
+    const start = Math.max(0, a || 0);
+    const dur = Math.max(0.5, Math.min(15, (b || c.duration) - start));
+    const dir = path.join(clipsDir(), 'GIFs');
+    fs.mkdirSync(dir, { recursive: true });
+    const out = path.join(dir, `${path.basename(c.file, '.mp4')}_${Date.now().toString(36)}.gif`);
+    await ffmpeg(['-y', '-hide_banner', '-loglevel', 'error', '-ss', start.toFixed(2), '-t', dur.toFixed(2), '-i', c.file,
+      '-filter_complex', 'fps=15,scale=480:-2:flags=lanczos,split[a][b];[a]palettegen=stats_mode=diff[p];[b][p]paletteuse=dither=bayer:bayer_scale=4',
+      '-loop', '0', out]);
+    await copyFileToClipboard(out);
+    return { ok: true, file: out, size: fs.statSync(out).size };
+  } finally { setBusy(id, false); }
+}
+
+// ── Google sign-in (OAuth 2.0 + PKCE, loopback redirect)
+const b64url = (buf) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const AUTH_PAGE = (title, text) => `<!doctype html><meta charset="utf-8"><title>Clipy</title>
+<body style="margin:0;height:100vh;display:grid;place-items:center;background:#000;color:#fff;font-family:Segoe UI,system-ui,sans-serif">
+<div style="text-align:center"><div style="width:64px;height:64px;border-radius:16px;background:#fff;margin:0 auto 24px;display:grid;place-items:center">
+<div style="width:22px;height:22px;border-radius:50%;background:#000"></div></div>
+<h1 style="margin:0 0 8px;font-size:28px;letter-spacing:-.02em">${title}</h1><p style="color:#8a8a8a;margin:0">${text}</p></div></body>`;
+
+async function googleSignIn() {
+  const clientId = (settings.googleClientId || '').trim();
+  if (!clientId) return { ok: false, needsSetup: true };
+  const verifier = b64url(crypto.randomBytes(32));
+  const challenge = b64url(crypto.createHash('sha256').update(verifier).digest());
+  const state = b64url(crypto.randomBytes(16));
+  const server = http.createServer();
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const redirect = `http://127.0.0.1:${server.address().port}`;
+  const codeP = new Promise((resolve, reject) => {
+    const t = setTimeout(() => reject(new Error('Sign-in timed out')), 5 * 60 * 1000);
+    server.on('request', (req, res) => {
+      const u = new URL(req.url, redirect);
+      if (u.pathname !== '/') { res.writeHead(404); return res.end(); }
+      const err = u.searchParams.get('error');
+      const ok = !err && u.searchParams.get('state') === state && u.searchParams.get('code');
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      res.end(ok ? AUTH_PAGE('You\'re signed in.', 'You can close this tab and go back to Clipy.') : AUTH_PAGE('Sign-in cancelled', 'Head back to Clipy and try again.'));
+      clearTimeout(t);
+      ok ? resolve(u.searchParams.get('code')) : reject(new Error(err || 'Sign-in failed'));
+    });
+  });
+  const auth = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+  auth.search = new URLSearchParams({
+    client_id: clientId, redirect_uri: redirect, response_type: 'code', scope: 'openid email profile',
+    code_challenge: challenge, code_challenge_method: 'S256', state, prompt: 'select_account',
+  }).toString();
+  shell.openExternal(auth.toString());
+  let code;
+  try { code = await codeP; } finally { server.close(); }
+  const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      code, client_id: clientId, client_secret: (settings.googleClientSecret || '').trim(),
+      redirect_uri: redirect, grant_type: 'authorization_code', code_verifier: verifier,
+    }),
+  });
+  const tok = await tokenRes.json();
+  if (!tokenRes.ok || !tok.access_token) throw new Error(tok.error_description || tok.error || 'Token exchange failed');
+  const uiRes = await fetch('https://openidconnect.googleapis.com/v1/userinfo', { headers: { Authorization: `Bearer ${tok.access_token}` } });
+  const info = await uiRes.json();
+  let picture = null;
+  if (info.picture) {
+    try {
+      const img = await fetch(info.picture.replace(/=s\d+-c$/, '=s256-c'));
+      picture = path.join(USER, 'avatar-google.jpg');
+      fs.writeFileSync(picture, Buffer.from(await img.arrayBuffer()));
+    } catch { picture = null; }
+  }
+  settings.google = { name: info.name || info.email, email: info.email, picture, since: Date.now() };
+  if (!settings.profileName) settings.profileName = info.given_name || info.name || '';
+  if (!settings.avatar && picture) settings.avatar = picture;
+  saveSettings();
+  showMain();
+  return { ok: true };
+}
+
+// ── update check (public GitHub releases API)
+const REPO = 'un0yy-sasse/Clipy';
+function newer(a, b) {
+  const pa = a.split('.').map(Number), pb = b.split('.').map(Number);
+  for (let i = 0; i < 3; i++) { if ((pa[i] || 0) !== (pb[i] || 0)) return (pa[i] || 0) > (pb[i] || 0); }
+  return false;
+}
+async function checkUpdate() {
+  if (!settings.checkUpdates || TEST_DIR) return;
+  try {
+    const r = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: { 'User-Agent': 'Clipy-App', Accept: 'application/vnd.github+json' } });
+    if (!r.ok) return;
+    const j = await r.json();
+    const v = String(j.tag_name || '').replace(/^v/, '');
+    if (v && newer(v, app.getVersion())) { update = { version: v, url: j.html_url }; pushState(); }
+  } catch {}
+}
+
+function profileForUI() {
+  return {
+    name: settings.profileName,
+    avatarUrl: settings.avatar && fs.existsSync(settings.avatar) ? fileUrl(settings.avatar) + `?v=${fs.statSync(settings.avatar).mtimeMs}` : null,
+    google: settings.google ? { name: settings.google.name, email: settings.google.email } : null,
+    googleConfigured: !!(settings.googleClientId || '').trim(),
+    discord: settings.discordWebhook ? settings.discordInfo || { name: 'Webhook' } : null,
+  };
+}
+
+ipcMain.handle('profile', () => profileForUI());
+ipcMain.handle('avatar:choose', async () => {
+  const r = await dialog.showOpenDialog(mainWin, { properties: ['openFile'], filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif'] }] });
+  if (r.canceled || !r.filePaths[0]) return profileForUI();
+  const dest = path.join(USER, 'avatar' + path.extname(r.filePaths[0]).toLowerCase());
+  try {
+    await ffmpeg(['-y', '-hide_banner', '-loglevel', 'error', '-i', r.filePaths[0], '-vf', "crop='min(iw,ih)':'min(iw,ih)',scale=256:256", '-frames:v', '1', path.join(USER, 'avatar.png')]);
+    settings.avatar = path.join(USER, 'avatar.png');
+  } catch {
+    fs.copyFileSync(r.filePaths[0], dest);
+    settings.avatar = dest;
+  }
+  saveSettings();
+  return profileForUI();
+});
+ipcMain.handle('avatar:clear', () => { settings.avatar = null; saveSettings(); return profileForUI(); });
+ipcMain.handle('google:signin', async () => {
+  try { return await googleSignIn(); } catch (e) { return { ok: false, error: e.message }; }
+});
+ipcMain.handle('google:signout', () => {
+  if (settings.google && settings.avatar === settings.google.picture) settings.avatar = null;
+  settings.google = null; saveSettings(); return profileForUI();
+});
+ipcMain.handle('google:help', () => shell.openExternal('https://console.cloud.google.com/apis/credentials'));
+ipcMain.handle('discord:connect', (_e, url) => discordConnect(url));
+ipcMain.handle('discord:disconnect', () => { settings.discordWebhook = ''; settings.discordInfo = null; settings.discordAutoPost = false; saveSettings(); return profileForUI(); });
+ipcMain.handle('discord:test', () => discordTest());
+ipcMain.handle('discord:send', async (_e, id) => { try { return await discordSend(id); } catch (e) { return { ok: false, error: e.message }; } });
+ipcMain.handle('clip:copy', async (_e, id) => { const c = library.find((x) => x.id === id); return c ? copyFileToClipboard(c.file) : false; });
+ipcMain.handle('clip:gif', async (_e, id, a, b) => { try { return await makeGif(id, a, b); } catch (e) { return { ok: false, error: e.message }; } });
+ipcMain.handle('clip:gmail', async (_e, id) => {
+  const c = library.find((x) => x.id === id);
+  if (!c) return false;
+  await copyFileToClipboard(c.file);
+  const su = encodeURIComponent(`Clipy: ${c.title}`);
+  const body = encodeURIComponent(`Check out this ${c.type === 'shot' ? 'screenshot' : 'clip'}${c.game ? ` from ${c.game}` : ''}!\n\n(attached)\n\n— sent with Clipy`);
+  shell.openExternal(`https://mail.google.com/mail/?view=cm&fs=1&su=${su}&body=${body}`);
+  return true;
+});
+ipcMain.handle('file:reveal', (_e, file) => { if (file && file.startsWith(settings.clipsDir)) shell.showItemInFolder(file); });
+ipcMain.handle('update:open', () => { if (update) shell.openExternal(update.url); });
+ipcMain.handle('external', (_e, which) => {
+  const urls = { repo: `https://github.com/${REPO}`, releases: `https://github.com/${REPO}/releases`, webhookHelp: 'https://support.discord.com/hc/en-us/articles/228383668' };
+  if (urls[which]) shell.openExternal(urls[which]);
+});
 
 // ───────────────────────────────────────────── toast overlay
 let toastTimer = null;
@@ -552,6 +866,8 @@ ipcMain.handle('settings:set', (_e, patch) => {
   if (patch.launchOnStartup !== undefined) applyLoginItem();
   if (CAPTURE_KEYS.some((k) => patch[k] !== undefined && patch[k] !== before[k])) startRecorder();
   if (patch.bufferEnabled !== undefined && patch.bufferEnabled !== before.bufferEnabled) startRecorder();
+  if (patch.maxStorageGB !== undefined) enforceStorage().catch(() => {});
+  if (patch.checkUpdates) checkUpdate();
   pruneSessions();
   pushState();
   return settings;
@@ -641,6 +957,8 @@ app.whenReady().then(async () => {
 
   encoder = await detectEncoder();
   pushState();
+  checkUpdate();
+  setInterval(checkUpdate, 6 * 60 * 60 * 1000);
 
   if (TEST_DIR) runSelfTest();
 });
@@ -658,6 +976,13 @@ async function runSelfTest() {
   log('encoder', encoder, 'ffmpeg', FFMPEG);
   await new Promise((r) => setTimeout(r, 14000));
   log('state', JSON.stringify(publicState()));
+  await shot('00-onboarding.png');
+  await mainWin.webContents.executeJavaScript(`document.querySelector('#oNext').click()`);
+  await new Promise((r) => setTimeout(r, 600));
+  await shot('00b-onboarding.png');
+  settings.profileName = 'Tester'; settings.onboarded = true; saveSettings();
+  await mainWin.webContents.executeJavaScript(`(async()=>{settings=await api.getSettings();profile=await api.profile();renderChip();closeModal();go('library')})()`);
+  await new Promise((r) => setTimeout(r, 800));
   await shot('01-empty.png');
   const r1 = await saveClip();
   log('clip1', JSON.stringify(r1));
@@ -670,9 +995,24 @@ async function runSelfTest() {
     mainWin.webContents.executeJavaScript(`openPlayer(${JSON.stringify(r1.id)})`);
     await new Promise((r) => setTimeout(r, 2500));
     await shot('03-player.png');
+    await mainWin.webContents.executeJavaScript(`document.querySelector('#pShare').click()`);
+    await new Promise((r) => setTimeout(r, 500));
+    await shot('03b-share.png');
     const t = await trimClip(r1.id, 1, 5);
     log('trim', JSON.stringify(t));
+    const g = await makeGif(r1.id, 0, 3).catch((e) => ({ ok: false, error: e.message }));
+    log('gif', JSON.stringify(g));
+    log('discord-bad', JSON.stringify(await discordConnect('https://example.com/nope')));
+    const big = library.find((c) => c.id === r1.id);
+    const cmp = await compressForLimit(big, 200000).then((f) => ({ ok: true, size: fs.statSync(f).size })).catch((e) => ({ ok: false, error: e.message }));
+    log('compress', JSON.stringify(cmp));
   }
+  mainWin.webContents.executeJavaScript(`closeMenu();closeModal();go('library')`);
+  await new Promise((r) => setTimeout(r, 1500));
+  await shot('02b-library.png');
+  mainWin.webContents.executeJavaScript(`go('profile')`);
+  await new Promise((r) => setTimeout(r, 1500));
+  await shot('05-profile.png');
   mainWin.webContents.executeJavaScript(`go('settings')`);
   await new Promise((r) => setTimeout(r, 1500));
   await shot('04-settings.png');

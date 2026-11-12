@@ -35,12 +35,35 @@ Grab the `.exe` from **[Releases](../../releases/latest)**:
 - **Tray mode & autostart** – Clipy keeps running quietly
 - Clips are saved as **MP4 (H.264/AAC)** to `Videos\Clipy` – plays everywhere
 
+### New in 1.0.1
+
+- **Discord integration** – connect a channel via webhook, send clips with one click, optional auto-post; clips over the upload limit (10 / 50 / 500 MB) are compressed automatically
+- **Profile** – name + picture, optional **Sign in with Google**, stats (top games, 14-day activity, streak)
+- **Share menu** – copy the file to the clipboard (paste into Discord/WhatsApp/Explorer), email via Gmail, export as **GIF**
+- **Latest clip spotlight**, game filter, right-click menu, quick actions on hover
+- Player: speed control, frame-by-frame (`,` `.`), next/previous clip (`↑` `↓`)
+- **Storage limit** – oldest non-favorite clips go to the Recycle Bin automatically
+- **Welcome tour** and **update notifications** from GitHub Releases
+
+### Google sign-in setup
+
+Google sign-in needs a free OAuth client ID (one time, ~5 min):
+
+1. [Google Cloud Console](https://console.cloud.google.com/apis/credentials) → create a project
+2. *OAuth consent screen* → External → add yourself as test user
+3. *Credentials → Create credentials → OAuth client ID* → **Desktop app**
+4. In Clipy: *Profile → Sign in with Google* → paste client ID + secret
+
 ## Player shortcuts
 
 | Key | Action |
 | --- | --- |
 | `Space` | Play / pause |
 | `←` `→` | Back / forward 5 s (with `Shift`: 1 s) |
+| `,` `.` | Previous / next frame |
+| `↑` `↓` | Previous / next clip |
+| `S` | Playback speed |
+| `Ctrl+C` | Copy file |
 | `I` / `O` | Set selection start / end |
 | `F` | Fullscreen |
 | `M` | Mute |
